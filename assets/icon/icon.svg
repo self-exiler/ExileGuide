@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  自制导航 · 主图标（罗盘）
+  =========================
+  画布: 512 x 512, 圆角 120 (约 23.4%), 与 iOS 应用图标圆角率接近
+  语义: 罗盘 = 导航; 四向主臂 + 对角刻度点呼应“分类跳转”
+  配色: 蓝紫渐变 (#6b73c0 -> #8e6bb0 -> #c9748a), 与 assets/bg/dusk.svg 同源;
+        白色符号保证浅色/深色主题下对比度稳定
+  依赖: 纯渐变 + 基础几何, 无滤镜/无文字/无外部引用, 便于任意栅格化工具转换
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="自制导航罗盘图标">
+  <title>自制导航</title>
+
+  <defs>
+    <!-- 背景渐变: 左上 -> 右下, 呼应 dusk.svg 的三段蓝紫 -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#6b73c0"/>
+      <stop offset="0.52" stop-color="#8e6bb0"/>
+      <stop offset="1"    stop-color="#c9748a"/>
+    </linearGradient>
+
+    <!-- 毛玻璃高光: 左上角柔光 -->
+    <radialGradient id="gloss" cx="0.32" cy="0.24" r="0.85">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 底色: 圆角渐变方块 -->
+  <rect x="0" y="0" width="512" height="512" rx="120" fill="url(#bg)"/>
+
+  <!-- 毛玻璃高光 -->
+  <rect x="0" y="0" width="512" height="512" rx="120" fill="url(#gloss)"/>
+
+  <!-- 玻璃描边: 内圈细边, 贴合毛玻璃质感 -->
+  <rect x="14" y="14" width="484" height="484" rx="106" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="6"/>
+
+  <g id="compass" fill="#ffffff">
+    <!-- 外环 -->
+    <circle cx="256" cy="256" r="138" fill="none" stroke="#ffffff" stroke-opacity="0.96" stroke-width="20"/>
+    <!-- 内细环 -->
+    <circle cx="256" cy="256" r="110" fill="none" stroke="#ffffff" stroke-opacity="0.42" stroke-width="3"/>
+
+    <!-- 主指针: 南北臂 -->
+    <polygon points="256,166 318,256 256,346 194,256"/>
+    <!-- 主指针: 东西臂 (略降透明, 增加层次) -->
+    <polygon points="256,194 346,256 256,318 166,256" fill-opacity="0.78"/>
+
+    <!-- 对角刻度点: 45/135/225/315 度, 半径 124 -->
+    <rect x="336" y="336" width="16" height="16" fill-opacity="0.85" transform="rotate(45 344 344)"/>
+    <rect x="160" y="336" width="16" height="16" fill-opacity="0.85" transform="rotate(45 168 344)"/>
+    <rect x="336" y="160" width="16" height="16" fill-opacity="0.85" transform="rotate(45 344 168)"/>
+    <rect x="160" y="160" width="16" height="16" fill-opacity="0.85" transform="rotate(45 168 168)"/>
+
+    <!-- 中心轴 -->
+    <circle cx="256" cy="256" r="26" fill="#ffffff"/>
+    <circle cx="256" cy="256" r="11" fill="url(#bg)"/>
+  </g>
+</svg>

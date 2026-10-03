@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>导航</title>
+  <link rel="preconnect" href="https://api.iowen.cn">
+  <link rel="icon" type="image/svg+xml" href="assets/icon/icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icon/favicon-32x32.png">
+  <link rel="icon" href="assets/icon/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="assets/icon/apple-touch-icon.png">
+  <script>
+  /* 首屏绘制前定主题，深色用户不闪白；键与结构须和 js/prefs.js 保持一致 */
+  (function () {
+    try {
+      var s = JSON.parse(localStorage.getItem('nav.settings')) || {};
+      var t = s.theme || 'auto';
+      if (t === 'auto') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* 隐私模式或旧数据：保持 html 上的默认值 */ }
+  })();
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 背景层：背景图与模糊效果，由 UI 层写入 -->
+  <div id="bg-layer" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <button id="settings-toggle" class="chip chip--icon" type="button"
+            aria-label="打开设置" aria-haspopup="dialog" aria-expanded="false">⚙</button>
+  </header>
+
+  <main class="stage">
+    <form id="search-form" class="search" autocomplete="off">
+      <select id="engine-select" class="engine-select" aria-label="搜索引擎"></select>
+      <input id="search-input" class="search-input" type="search" placeholder="输入后回车搜索" aria-label="搜索关键词">
+      <button type="submit" class="search-go" aria-label="搜索">↵</button>
+    </form>
+
+    <nav id="tabs" class="tabs" aria-label="分类"></nav>
+    <!-- 不设 aria-live：切换状态已由 .tab 的 aria-current 表达 -->
+    <section id="grid" class="grid"></section>
+    <p id="error" class="error" hidden></p>
+  </main>
+
+  <!-- 设置浮窗：草稿式编辑，关闭时统一应用 -->
+  <div id="settings-overlay" class="overlay" hidden>
+    <section id="settings-panel" class="panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="panel-head">
+        <h2 id="settings-title">设置</h2>
+        <button id="settings-close" class="chip chip--icon" type="button" aria-label="关闭并应用">×</button>
+      </header>
+
+      <div class="panel-body">
+        <div class="field">
+          <span class="field-label">背景</span>
+          <div id="settings-bg" class="bg-picker"></div>
+        </div>
+
+        <div class="field field--row">
+          <span class="field-label">背景模糊</span>
+          <label class="switch">
+            <input id="settings-blur" type="checkbox">
+            <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+          </label>
+        </div>
+
+        <div class="field">
+          <span class="field-label">主题</span>
+          <div id="settings-theme" class="seg"></div>
+        </div>
+
+        <div class="field field--row">
+          <span class="field-label">数据维护</span>
+          <a class="btn" href="tools/yaml-editor.html" target="_blank" rel="noopener"
+             aria-label="打开数据编辑器（新标签页）"
+             title="在可视化编辑器里增删改分类与网站；保存后回本页刷新即可生效">打开数据编辑器 ↗</a>
+        </div>
+      </div>
+
+      <footer class="panel-foot">
+        <span class="panel-hint">关闭浮窗后应用配置</span>
+        <button id="settings-apply" class="btn btn--primary" type="button">应用并关闭</button>
+      </footer>
+    </section>
+  </div>
+
+  <script defer src="js/vendor/js-yaml.min.js"></script>
+  <script defer src="js/icons.js"></script>
+  <script defer src="js/data.js"></script>
+  <script defer src="js/prefs.js"></script>
+  <script defer src="js/ui.js"></script>
+  <script defer src="js/app.js"></script>
+</body>
+</html>

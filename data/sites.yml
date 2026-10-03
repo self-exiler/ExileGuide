@@ -1,0 +1,134 @@
+# 导航数据：编辑本文件 → commit → push 即生效（FR-1）
+#
+# settings      页面级配置
+# searchEngines 搜索框引擎列表，首个为默认；%s 为关键词占位符
+# backgrounds   背景切换器候选图（仓库相对路径）
+# categories    分类；站点加 pinned: true 即出现在首页大图标区
+
+settings:
+  title: 我的导航
+  background: assets/bg/dusk.svg
+  bgBlur: true
+searchEngines:
+  - name: Google
+    url: https://www.google.com/search?q=%s
+  - name: 百度
+    url: https://www.baidu.com/s?wd=%s
+  - name: Bing
+    url: https://www.bing.com/search?q=%s
+backgrounds:
+  - assets/bg/dusk.svg
+  - assets/bg/ocean.svg
+  - assets/bg/ink.svg
+categories:
+  - name: 论坛社区
+    sites:
+      - name: 知乎
+        url: https://www.zhihu.com/
+        pinned: true
+      - name: 星海论坛
+        url: https://bbs.dippstar.com/
+        pinned: true
+      - name: Stage1st
+        url: https://stage1st.com/2b/
+        pinned: true
+      - name: 瀚思彼岸
+        url: https://bbs.hassbian.com/forum.php
+      - name: 恩山无线
+        url: https://www.right.com.cn/forum/forum.php
+      - name: NGA
+        url: https://ngabbs.com/
+      - name: 水木社区
+        url: https://www.newsmth.net/
+      - name: Soul-Plus
+        url: https://www.blue-plus.net/
+      - name: 豆瓣
+        url: https://www.douban.com/
+  - name: 游戏娱乐
+    sites:
+      - name: 嗷呜喵
+        url: https://www.aowu-miao.com/
+        desc: 一个类塞雷卡2游戏独立开发者博客
+      - name: Starcraft-shooter
+        url: https://starcraft-shooter-2026.pages.dev/
+        desc: 一个星际争霸的二创小游戏
+  - name: AI工具
+    sites:
+      - name: LMarena
+        url: https://arena.ai/
+        desc: 模型PK评测和排名
+      - name: Deepseek
+        url: https://www.deepseek.com/
+      - name: Civitai
+        url: https://civitai.red/
+        desc: stable diffusion
+  - name: 开发
+    sites:
+      - name: Github
+        url: https://github.com/
+      - name: Nuitka命令生成器
+        url: https://nuitka-commander.erduotong.com/
+  - name: 工具资讯
+    sites:
+      - name: 虫部落
+        url: https://search.chongbuluo.com/
+        desc: 搜索引擎聚合
+      - name: 马蜂窝
+        url: https://www.mafengwo.cn/
+        desc: 穷游
+      - name: 天眼查
+        url: https://www.tianyancha.com/
+      - name: 殆知阁
+        url: https://daizhige.org/
+        desc: 中国古典文献全文检索
+      - name: 默沙东诊疗手册
+        url: https://www.msdmanuals.cn/
+      - name: 软考官网
+        url: https://www.ruankao.org.cn/
+      - name: 公众号管理
+        url: https://mp.weixin.qq.com/
+      - name: ikuuu
+        url: https://ikuuu.pw
+      - name: 甲骨文云
+        url: https://www.oracle.com/
+      - name: 台风轨迹
+        url: https://typhoon.slt.zj.gov.cn/
+      - name: 裁判文书网
+        url: https://wenshu.court.gov.cn/
+      - name: 妙佑医疗
+        url: https://www.mayoclinic.org/zh-hans
+        desc: 另一种医疗百科
+  - name: 影音娱乐
+    sites:
+      - name: 动漫花园
+        url: https://share.dmhy.org/
+      - name: Bilibil
+        url: https://www.bilibili.com/
+        pinned: true
+  - name: 金融理财
+    sites:
+      - name: 大盘云图
+        url: https://summary.jrj.com.cn/dataCenter/dpyt/
+        desc: 可视化板块情况
+      - name: 巨潮资讯网
+        url: https://www.cninfo.com.cn/
+      - name: 雪球
+        url: https://xueqiu.com/
+      - name: 集思录
+        url: https://www.jisilu.cn/
+  - name: 云服务自建
+    sites:
+      - name: FreshRSS
+        url: http://150.230.29.77:18081/
+      - name: 青龙面板
+        url: http://150.230.29.77:15700/
+      - name: Alist
+        url: http://132.145.99.231:5244/
+  - name: Wiki
+    sites:
+      - name: 萌娘百科
+        url: https://mzh.moegirl.org.cn/
+      - name: THB维基
+        url: https://thwiki.cc/
+      - name: 魔法禁书目录维基
+        url: https://toaru.huijiwiki.com/

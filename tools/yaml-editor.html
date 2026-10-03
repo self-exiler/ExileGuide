@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sites.yml 编辑器</title>
+<style>
+  :root {
+    --bg: #f4f6fa; --fg: #1b1f27; --dim: #6b7280;
+    --card: #fff; --line: #e2e6ee; --accent: #4a7cf7; --warn: #c2410c; --ok: #15803d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .bar {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 12px 18px; background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  .bar h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+  main { max-width: 1000px; margin: 0 auto; padding: 18px 18px 60px; }
+  .card {
+    margin-bottom: 16px; padding: 16px 18px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  }
+  .card h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: 15px; }
+  .card h2 .btn { margin-left: auto; }
+  .hint { margin: 0 0 12px; color: var(--dim); font-size: 12px; }
+  code { padding: 1px 5px; border-radius: 4px; background: var(--bg); font-size: 12px; }
+  .status { margin: 12px 18px 0; padding: 8px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); font-size: 13px; }
+  .status[data-bad="1"] { border-color: var(--warn); color: var(--warn); }
+  .btn {
+    padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--fg); font-size: 13px; cursor: pointer; text-decoration: none;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn--go { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .btn--go:hover { color: #fff; opacity: .9; }
+  .btn--icon { padding: 4px 8px; line-height: 1; }
+  .btn--sm { padding: 3px 10px; font-size: 12px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .in {
+    flex: 1 1 140px; min-width: 0; padding: 6px 9px;
+    border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--fg); font-size: 13px;
+  }
+  .in--url { flex: 2 1 240px; }
+  .in--desc { flex: 2 1 200px; }
+  .in--sm { flex: 0 0 84px; }
+  .in.bad { border-color: var(--warn); background: #fff7ed; }
+  .pin { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--dim); white-space: nowrap; }
+  .moves { display: inline-flex; gap: 4px; }
+  .cat { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe; }
+  .cat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .cat-head .in { flex: 0 1 220px; font-weight: 600; }
+  .tag { font-size: 12px; color: var(--dim); }
+  .sites { margin: 8px 0 0 8px; padding-left: 10px; border-left: 2px solid var(--line); }
+  .cat.collapsed .sites, .cat.collapsed .batch { display: none; }
+  .batch { margin: 10px 0 0 8px; font-size: 12px; color: var(--dim); }
+  .batch textarea { width: 100%; margin-top: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; }
+  .yaml {
+    width: 100%; height: 320px; margin-top: 8px; padding: 12px;
+    border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe;
+    font: 12px/1.7 ui-monospace, Menlo, Consolas, monospace; color: var(--fg); resize: vertical;
+  }
+  .issues { margin: 0; font-size: 13px; }
+  .issues.ok { color: var(--ok); }
+  .issues ul { margin: 6px 0 0; padding-left: 20px; color: var(--warn); }
+  .add { margin-top: 10px; }
+</style>
+</head>
+<body>
+  <header class="bar">
+    <h1>sites.yml 编辑器</h1>
+    <div class="acts">
+      <button id="btn-open" class="btn">打开 sites.yml</button>
+      <button id="btn-save" class="btn btn--go">保存</button>
+      <button id="btn-download" class="btn">下载</button>
+      <button id="btn-copy" class="btn">复制全文</button>
+      <a class="btn" href="../index.html" target="_blank" rel="noopener">预览导航页</a>
+    </div>
+  </header>
+
+  <p id="status" class="status">正在读取 data/sites.yml …</p>
+
+  <main>
+    <section class="card">
+      <h2>基本设置</h2>
+      <div id="settings"></div>
+    </section>
+
+    <section class="card">
+      <h2>搜索引擎<button id="add-engine" class="btn btn--sm">+ 添加</button></h2>
+      <p class="hint">网址必须包含 <code>%s</code>，搜索时会被替换成关键词；排第一个的是默认引擎。</p>
+      <div id="engines"></div>
+    </section>
+
+    <section class="card">
+      <h2>背景图<button id="add-bg" class="btn btn--sm">+ 添加</button></h2>
+      <p class="hint">仓库相对路径，例如 <code>assets/bg/dusk.svg</code>；图片本体放进 <code>assets/bg/</code>。</p>
+      <div id="bgs"></div>
+    </section>
+
+    <section class="card">
+      <h2>分类与网站<button id="add-cat" class="btn btn--sm">+ 添加分类</button></h2>
+      <p class="hint">勾选「首页」的站点会同时出现在首页大图标区；「说明」是悬停卡片时的 tooltip。</p>
+      <div id="cats"></div>
+    </section>
+
+    <section class="card">
+      <h2>YAML 预览</h2>
+      <p class="hint">只读预览：以上方表单为唯一事实源，改动实时反映到这里。保存时保留原文件头部注释块，行内手写注释不保留。</p>
+      <p id="issues" class="issues"></p>
+      <textarea id="yaml" class="yaml" spellcheck="false" readonly></textarea>
+    </section>
+  </main>
+
+  <input id="file" type="file" accept=".yml,.yaml,.txt" hidden>
+
+  <script src="../js/vendor/js-yaml.min.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    var model = null;   // 当前编辑中的数据结构
+    var handle = null;  // File System Access 句柄，有则可一键覆盖原文件
+    var yamlHeader = ''; // 原文件头部注释块；重 dump 会丢注释，导出时拼回
+
+    function $(id) { return document.getElementById(id); }
+    function isHttp(v) { return /^https?:\/\/\S+$/.test(String(v || '').trim()); }
+    function arr(v) { return Array.isArray(v) ? v : []; }
+    function str(v) { return v == null ? '' : String(v); }
+
+    function el(tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    }
+
+    function input(value, ph, cls, onInput) {
+      var i = el('input', 'in' + (cls ? ' ' + cls : ''));
+      i.value = str(value);
+      i.placeholder = ph;
+      i.addEventListener('input', function () { onInput(i.value); });
+      return i;
+    }
+
+    function button(label, title, fn, cls) {
+      var b = el('button', 'btn ' + (cls || 'btn--icon'), label);
+      b.type = 'button';
+      b.title = title;
+      b.addEventListener('click', fn);
+      return b;
+    }
+
+    // 上移/下移：交换后重渲该列表
+    function moves(list, i, rerender) {
+      var wrap = el('span', 'moves');
+      function swap(delta) {
+        var j = i + delta;
+        if (j < 0 || j >= list.length) return;
+        var t = list[i]; list[i] = list[j]; list[j] = t;
+        rerender();
+        syncYaml();
+      }
+      wrap.appendChild(button('↑', '上移', function () { swap(-1); }));
+      wrap.appendChild(button('↓', '下移', function () { swap(1); }));
+      return wrap;
+    }
+
+    /* ---------------- 载入 ---------------- */
+
+    function blankModel() {
+      return {
+        settings: { title: '导航', background: '', bgBlur: false },
+        searchEngines: [], backgrounds: [], categories: []
+      };
+    }
+
+    function loadText(text, source) {
+      var raw;
+      try {
+        raw = jsyaml.load(text) || {};
+      } catch (e) {
+        status('YAML 解析失败：' + e.message, true);
+        return false;
+      }
+      if (!raw || typeof raw !== 'object') raw = {};
+      yamlHeader = (text.match(/^(?:[ \t]*(?:#[^\n]*)?\n)*/) || [''])[0];
+      model = {
+        settings: {
+          title: str((raw.settings || {}).title) || '导航',
+          background: str((raw.settings || {}).background),
+          bgBlur: !!(raw.settings || {}).bgBlur
+        },
+        searchEngines: arr(raw.searchEngines).map(function (e) {
+          return { name: str(e && e.name), url: str(e && e.url) };
+        }),
+        backgrounds: arr(raw.backgrounds).map(str),
+        categories: arr(raw.categories).map(function (c) {
+          return {
+            name: str(c && c.name) || '未命名',
+            sites: arr(c && c.sites).map(function (s) {
+              return { name: str(s && s.name), url: str(s && s.url), pinned: !!(s && s.pinned), desc: str(s && s.desc) };
+            })
+          };
+        })
+      };
+      renderAll();
+      status('已载入 ' + source + '：' + model.categories.length + ' 个分类、' + countSites() + ' 个网站');
+      return true;
+    }
+
+    function countSites() {
+      return model.categories.reduce(function (n, c) { return n + c.sites.length; }, 0);
+    }
+
+    function status(text, bad) {
+      var s = $('status');
+      s.textContent = text;
+      s.setAttribute('data-bad', bad ? '1' : '0');
+    }
+
+    /* ---------------- 渲染 ---------------- */
+
+    function renderAll() {
+      renderSettings();
+      renderEngines();
+      renderBg();
+      renderCats();
+      syncYaml();
+    }
+
+    function renderSettings() {
+      var box = $('settings');
+      box.textContent = '';
+
+      var title = input(model.settings.title, '我的导航', '', function (v) { model.settings.title = v; syncYaml(); });
+      box.appendChild(el('div', 'row', '')).appendChild(title);
+
+      var sel = el('select', 'in');
+      sel.appendChild(option('（无背景）', ''));
+      model.backgrounds.forEach(function (p) { sel.appendChild(option(p, p)); });
+      // 当前值不在候选里时补一项，避免静默丢失
+      if (model.settings.background && model.backgrounds.indexOf(model.settings.background) === -1) {
+        sel.appendChild(option(model.settings.background + '（不在候选列表中）', model.settings.background));
+      }
+      sel.value = model.settings.background || '';
+      sel.addEventListener('change', function () { model.settings.background = sel.value; syncYaml(); });
+      var r2 = el('div', 'row');
+      r2.appendChild(el('span', 'tag', '默认背景'));
+      r2.appendChild(sel);
+      box.appendChild(r2);
+
+      var lab = el('label', 'pin');
+      var cb = el('input');
+      cb.type = 'checkbox';
+      cb.checked = model.settings.bgBlur;
+      cb.addEventListener('change', function () { model.settings.bgBlur = cb.checked; syncYaml(); });
+      lab.appendChild(cb);
+      lab.appendChild(el('span', '', '默认开启背景模糊'));
+      var r3 = el('div', 'row');
+      r3.appendChild(lab);
+      box.appendChild(r3);
+    }
+
+    function option(text, value) {
+      var o = el('option', '', text);
+      o.value = value;
+      return o;
+    }
+
+    function renderEngines() {
+      var box = $('engines');
+      box.textContent = '';
+      model.searchEngines.forEach(function (e, i) {
+        var row = el('div', 'row');
+        var name = input(e.name, '名称', 'in--sm', function (v) {
+          e.name = v;
+          mark(name, !e.name);
+          syncYaml();
+        });
+        var url = input(e.url, 'https://...?q=%s', 'in--url', function (v) {
+          e.url = v;
+          mark(url, !isHttp(e.url) || e.url.indexOf('%s') === -1);
+          syncYaml();
+        });
+        row.appendChild(name);
+        row.appendChild(url);
+        row.appendChild(moves(model.searchEngines, i, renderEngines));
+        row.appendChild(button('×', '删除', function () {
+          model.searchEngines.splice(i, 1);
+          renderEngines();
+          syncYaml();
+        }));
+        box.appendChild(row);
+        mark(name, !e.name);
+        mark(url, !isHttp(e.url) || e.url.indexOf('%s') === -1);
+      });
+      if (!model.searchEngines.length) box.appendChild(el('p', 'hint', '还没有搜索引擎'));
+    }
+
+    function renderBg() {
+      var box = $('bgs');
+      box.textContent = '';
+      model.backgrounds.forEach(function (p, i) {
+        var row = el('div', 'row');
+        row.appendChild(input(p, 'assets/bg/xxx.svg', 'in--url', function (v) {
+          model.backgrounds[i] = v;
+          syncYaml();
+        }));
+        row.appendChild(moves(model.backgrounds, i, renderBg));
+        row.appendChild(button('×', '删除', function () {
+          model.backgrounds.splice(i, 1);
+          renderBg();
+          renderSettings();
+          syncYaml();
+        }));
+        box.appendChild(row);
+      });
+      if (!model.backgrounds.length) box.appendChild(el('p', 'hint', '还没有候选背景'));
+    }
+
+    function renderCats() {
+      var box = $('cats');
+      box.textContent = '';
+      model.categories.forEach(function (cat, ci) {
+        var wrap = el('div', 'cat');
+        var head = el('div', 'cat-head');
+        head.appendChild(input(cat.name, '分类名', 'in--sm', function (v) { cat.name = v; syncYaml(); }));
+        head.appendChild(el('span', 'tag', cat.sites.length + ' 个网站'));
+        head.appendChild(button('收起', '收起/展开', function () {
+          wrap.classList.toggle('collapsed');
+        }, 'btn--sm'));
+        head.appendChild(moves(model.categories, ci, renderCats));
+        head.appendChild(button('×', '删除分类', function () {
+          if (!confirm('删除分类「' + cat.name + '」及其 ' + cat.sites.length + ' 个网站？')) return;
+          model.categories.splice(ci, 1);
+          renderCats();
+          syncYaml();
+        }));
+        wrap.appendChild(head);
+
+        var list = el('div', 'sites');
+        cat.sites.forEach(function (site, si) {
+          list.appendChild(siteRow(cat, site, si));
+        });
+        wrap.appendChild(list);
+
+        var addRow = el('div', 'add');
+        addRow.appendChild(button('+ 添加网站', '新增一条', function () {
+          cat.sites.push({ name: '', url: '', pinned: false, desc: '' });
+          renderCats();
+          syncYaml();
+        }, 'btn--sm'));
+        wrap.appendChild(addRow);
+
+        wrap.appendChild(batchBox(cat));
+        box.appendChild(wrap);
+      });
+      if (!model.categories.length) box.appendChild(el('p', 'hint', '还没有分类'));
+    }
+
+    function siteRow(cat, site, si) {
+      var row = el('div', 'row');
+      var name = input(site.name, '名称', 'in--sm', function (v) {
+        site.name = v;
+        mark(name, !site.name);
+        syncYaml();
+      });
+      var url = input(site.url, 'https://...', 'in--url', function (v) {
+        site.url = v.trim();
+        // 网址填了但名字空着时，顺手用域名补上，省一次输入
+        if (!site.name && isHttp(site.url)) {
+          name.value = nameFromUrl(site.url);
+          site.name = name.value;
+        }
+        mark(name, !site.name);
+        mark(url, !isHttp(site.url));
+        syncYaml();
+      });
+      var desc = input(site.desc, '说明（可留空）', 'in--desc', function (v) { site.desc = v; syncYaml(); });
+
+      var pin = el('label', 'pin');
+      var cb = el('input');
+      cb.type = 'checkbox';
+      cb.checked = site.pinned;
+      cb.addEventListener('change', function () { site.pinned = cb.checked; syncYaml(); });
+      pin.appendChild(cb);
+      pin.appendChild(el('span', '', '首页'));
+
+      row.appendChild(name);
+      row.appendChild(url);
+      row.appendChild(pin);
+      row.appendChild(desc);
+      row.appendChild(moves(cat.sites, si, renderCats));
+      row.appendChild(button('×', '删除', function () {
+        cat.sites.splice(si, 1);
+        renderCats();
+        syncYaml();
+      }));
+
+      mark(url, !isHttp(site.url));
+      mark(name, !site.name);
+      return row;
+    }
+
+    // 批量粘贴：每行一个网站，格式「网址」或「名称 网址 说明」
+    function batchBox(cat) {
+      var box = el('details', 'batch');
+      box.appendChild(el('summary', '', '批量粘贴添加（每行一个）'));
+      var ta = el('textarea');
+      ta.rows = 3;
+      ta.placeholder = 'https://example.com\n谷歌 https://www.google.com 搜索\n少数派 | https://sspai.com | 优质内容平台';
+      var go = button('批量添加', '按行解析并追加到本分类', function () {
+        var lines = ta.value.split('\n');
+        var added = 0;
+        lines.forEach(function (line) {
+          var site = parseSite(line);
+          if (!site) return;
+          cat.sites.push(site);
+          added++;
+        });
+        ta.value = '';
+        renderCats();
+        syncYaml();
+        status(added ? '已添加 ' + added + ' 个网站到「' + cat.name + '」' : '没有识别到有效行（每行要有 http/https 网址）', !added);
+      }, 'btn--sm');
+      box.appendChild(ta);
+      box.appendChild(go);
+      return box;
+    }
+
+    function parseSite(line) {
+      line = String(line).trim();
+      if (!line || line.charAt(0) === '#') return null;
+      var parts = line.indexOf('|') !== -1
+        ? line.split('|').map(function (s) { return s.trim(); })
+        : line.split(/\s+/);
+      parts = parts.filter(Boolean);
+      if (!parts.length) return null;
+
+      var name = '', url = '', desc = '';
+      var head = parts.findIndex(function (p) { return /^https?:\/\//i.test(p); });
+      if (head === -1) return null;
+      if (head > 0) name = parts.slice(0, head).join(' ');
+      url = parts[head];
+      desc = parts.slice(head + 1).join(' ');
+      if (!isHttp(url)) return null;
+      return { name: name || nameFromUrl(url), url: url, pinned: false, desc: desc };
+    }
+
+    function nameFromUrl(url) {
+      try {
+        var host = new URL(url).hostname.replace(/^www\./, '');
+        return host.charAt(0).toUpperCase() + host.slice(1);
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function mark(node, bad) {
+      node.classList.toggle('bad', !!bad);
+    }
+
+    /* ---------------- 导出 ---------------- */
+
+    // 空字段不写进 YAML，保持文件干净
+    function clean() {
+      return {
+        settings: {
+          title: model.settings.title,
+          background: model.settings.background || '',
+          bgBlur: !!model.settings.bgBlur
+        },
+        searchEngines: model.searchEngines.map(function (e) { return { name: e.name, url: e.url }; }),
+        backgrounds: model.backgrounds.slice(),
+        categories: model.categories.map(function (c) {
+          return {
+            name: c.name,
+            sites: c.sites.map(function (s) {
+              var o = { name: s.name, url: s.url };
+              if (s.pinned) o.pinned = true;
+              if (s.desc) o.desc = s.desc;
+              return o;
+            })
+          };
+        })
+      };
+    }
+
+    function validate() {
+      var issues = [];
+      if (!model.settings.title) issues.push('页面标题为空');
+      model.searchEngines.forEach(function (e, i) {
+        var tag = '第 ' + (i + 1) + ' 个搜索引擎';
+        if (!e.name) issues.push(tag + '未填名称');
+        if (!isHttp(e.url)) issues.push(tag + '网址无效（须 http/https）');
+        else if (e.url.indexOf('%s') === -1) issues.push(tag + '网址缺少 %s 占位符');
+      });
+      model.categories.forEach(function (c) {
+        if (!c.name) issues.push('有分类未命名');
+        c.sites.forEach(function (s) {
+          if (!isHttp(s.url)) issues.push('「' + (s.name || '未命名') + '」网址无效（须 http/https）');
+          else if (!s.name) issues.push(s.url + ' 未填名称');
+        });
+      });
+      return issues;
+    }
+
+    function syncYaml() {
+      // 预览区只读，无条件回写，保存的永远是当前表单内容
+      $('yaml').value = yamlHeader + jsyaml.dump(clean(), { lineWidth: -1, noRefs: true });
+
+      var issues = validate();
+      var box = $('issues');
+      box.textContent = '';
+      box.className = 'issues' + (issues.length ? '' : ' ok');
+      if (!issues.length) {
+        box.textContent = '检查通过，可以保存。';
+        return;
+      }
+      box.textContent = '有 ' + issues.length + ' 处需要注意（不影响保存，但导航页会丢弃无效条目）：';
+      var ul = el('ul');
+      issues.slice(0, 12).forEach(function (t) { ul.appendChild(el('li', '', t)); });
+      if (issues.length > 12) ul.appendChild(el('li', '', '……其余 ' + (issues.length - 12) + ' 处类似'));
+      box.appendChild(ul);
+    }
+
+    function currentText() {
+      return $('yaml').value;
+    }
+
+    function download() {
+      var blob = new Blob([currentText()], { type: 'text/yaml;charset=utf-8' });
+      var a = el('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'sites.yml';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      status('已下载 sites.yml —— 用它覆盖 data/sites.yml 即可');
+    }
+
+    async function save() {
+      var text = currentText();
+      try {
+        if (!handle && window.showSaveFilePicker) {
+          handle = await window.showSaveFilePicker({
+            suggestedName: 'sites.yml',
+            types: [{ description: 'YAML 文件', accept: { 'text/yaml': ['.yml', '.yaml'] } }]
+          });
+        }
+        if (handle) {
+          var w = await handle.createWritable();
+          await w.write(text);
+          await w.close();
+          status('已保存：' + handle.name + '（回到导航页刷新即可看到）');
+          return;
+        }
+      } catch (e) {
+        if (e && e.name === 'AbortError') { status('已取消保存'); return; }
+      }
+      download();
+    }
+
+    async function openFile() {
+      if (window.showOpenFilePicker) {
+        try {
+          var picks = await window.showOpenFilePicker({
+            multiple: false,
+            types: [{ description: 'YAML 文件', accept: { 'text/yaml': ['.yml', '.yaml'] } }]
+          });
+          handle = picks[0];
+          var f = await handle.getFile();
+          loadText(await f.text(), handle.name);
+          return;
+        } catch (e) {
+          if (e && e.name !== 'AbortError') handle = null;
+          else return;
+        }
+      }
+      $('file').click();
+    }
+
+    /* ---------------- 接线 ---------------- */
+
+    $('btn-open').addEventListener('click', openFile);
+    $('btn-save').addEventListener('click', save);
+    $('btn-download').addEventListener('click', download);
+    $('btn-copy').addEventListener('click', function () {
+      var ta = $('yaml');
+      ta.select();
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(currentText()).then(
+          function () { status('已复制到剪贴板'); },
+          function () { status('复制失败，请手动全选预览区复制', true); }
+        );
+      } else {
+        status('浏览器不支持一键复制，已选中全文，请按 Ctrl+C', true);
+      }
+    });
+
+    $('file').addEventListener('change', function () {
+      var f = this.files[0];
+      this.value = '';
+      if (f) f.text().then(function (t) { loadText(t, f.name); });
+    });
+
+    $('add-engine').addEventListener('click', function () {
+      model.searchEngines.push({ name: '', url: 'https://www.baidu.com/s?wd=%s' });
+      renderEngines();
+      syncYaml();
+    });
+
+    $('add-bg').addEventListener('click', function () {
+      model.backgrounds.push('');
+      renderBg();
+      syncYaml();
+    });
+
+    $('add-cat').addEventListener('click', function () {
+      model.categories.push({ name: '新分类', sites: [] });
+      renderCats();
+      syncYaml();
+    });
+
+    if (typeof jsyaml === 'undefined') {
+      status('js-yaml 未加载。请通过本地 HTTP 服务打开本页：在项目根目录运行 python -m http.server 8765，再访问 http://127.0.0.1:8765/tools/yaml-editor.html', true);
+      return;
+    }
+
+    // 自动读取 data/sites.yml（需 HTTP；file:// 下请用「打开 sites.yml」）
+    fetch('../data/sites.yml').then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (t) {
+      loadText(t, 'data/sites.yml');
+    }).catch(function () {
+      model = blankModel();
+      renderAll();
+      status('未能自动读取 data/sites.yml。请点「打开 sites.yml」选择文件，或经本地 HTTP 服务打开本页（python -m http.server 8765）。', true);
+    });
+  })();
+  </script>
+</body>
+</html>
