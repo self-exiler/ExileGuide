@@ -22,12 +22,18 @@ window.NavUI = (function () {
 
   var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
 
+  var WHEEL_STEP = 40;    // 累积到多少 px 才算一次切换
+  var WHEEL_IDLE = 220;   // 静默多久后解除锁定，防止一次滑动连跳
+  var wheelAcc = 0;
+  var wheelLocked = false;
+
   function $(id) { return document.getElementById(id); }
 
   function init(callbacks) {
     handlers = callbacks || {};
     el.bgLayer = $('bg-layer');
     el.title = document.querySelector('title');
+    el.stage = $('stage');
     el.searchForm = $('search-form');
     el.searchInput = $('search-input');
     el.engineSelect = $('engine-select');
@@ -74,6 +80,40 @@ window.NavUI = (function () {
     systemDark.addEventListener('change', function () {
       if (settings && settings.theme === 'auto') paintTheme();
     });
+
+    // 悬停在分类区时用滚轮切标签。需 passive:false 才能 preventDefault 阻止页面滚动。
+    if (el.stage) el.stage.addEventListener('wheel', function (ev) {
+      // deltaMode 归一化成像素：Firefox 鼠标滚轮常为 DOM_DELTA_LINE（每格约 3 行），
+      // 直接按原值累计会导致 WHEEL_STEP 要滚十几下才切换。
+      var scale = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 100 : 1;
+      var dy = ev.deltaY * scale;
+      var dx = ev.deltaX * scale;
+      // 只接管纵向滚动；触控板横向手势放行
+      if (Math.abs(dy) <= Math.abs(dx)) return;
+      if (draft) return; // 浮窗 .overlay 已 fixed 铺满视口，滚轮本走不到这里；留作 DOM 结构变动的护栏
+      ev.preventDefault();
+      if (wheelLocked) return;
+      wheelAcc += dy;
+      if (Math.abs(wheelAcc) < WHEEL_STEP) return;
+      var dir = wheelAcc > 0 ? 1 : -1;
+      wheelAcc = 0;
+      wheelLocked = true;
+      // 锁定到滚动停歇，避免一次惯性滑动连跳多个分类
+      setTimeout(function () { wheelLocked = false; }, WHEEL_IDLE);
+      stepTab(dir);
+    }, { passive: false });
+  }
+
+  // 环形切换：末项向下回首页，首项向上回末项。
+  // activeTab 用 -1 表示首页、0..n-1 表示分类，与 0-based 索引不同源，故不走取模。
+  function stepTab(dir) {
+    if (!model) return;
+    var last = model.categories.length - 1;
+    if (last < 1) return;
+    var next = activeTab + dir;
+    if (next > last) next = -1;
+    else if (next < -1) next = last;
+    showTab(next);
   }
 
   /* ---------------- 渲染 ---------------- */

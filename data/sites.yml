@@ -62,6 +62,24 @@ categories:
       - name: Civitai
         url: https://civitai.red/
         desc: stable diffusion
+      - name: Drawing Spells
+        url: https://hbl917070.github.io/DrawingSpells/
+        desc: 动漫/游戏角色提示词查询，收录 e621 数据集中超过 30 张图的角色
+      - name: AI Tag
+        url: https://aitag.win/
+        desc: 面向 Stable Diffusion、ComfyUI、NovelAI 的一站式绘画标签搜索
+      - name: Danbooru 标签超市
+        url: https://tags.novelai.dev/
+        desc: Danbooru 标签体系提示词构建，3135 个标签，21 组预设，支持权重调整
+      - name: 大呲花的AI绘画攻略
+        url: https://my.feishu.cn/wiki/JGBow5GfviRbfQkrWUBcs0cin8c
+        desc: 飞书 Wiki，AI 绘画入门攻略与提示词整理
+      - name: AnimaDex
+        url: https://animadex.net/
+        desc: ANIMA 角色与提示词样本目录，36+ 角色、15+ 艺术家，可按标签组合搜索
+      - name: DanbooruSearch
+        url: https://huggingface.co/spaces/SAkizuki/DanbooruSearch
+        desc: Danbooru 标签搜索，支持中文模糊匹配，提供 REST API 与 MCP 协议
   - name: 开发
     sites:
       - name: Github
@@ -98,13 +116,16 @@ categories:
       - name: 妙佑医疗
         url: https://www.mayoclinic.org/zh-hans
         desc: 另一种医疗百科
-  - name: 影音娱乐
+  - name: 动漫ACG
     sites:
       - name: 动漫花园
         url: https://share.dmhy.org/
       - name: Bilibil
         url: https://www.bilibili.com/
         pinned: true
+      - name: Yuriko.cn
+        url: http://yuriko.cn
+        desc: 东方project同人接力活动归档网站
   - name: 金融理财
     sites:
       - name: 大盘云图
