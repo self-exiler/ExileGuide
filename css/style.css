@@ -72,7 +72,7 @@ body.bg-blur .chip,
 body.bg-blur .search,
 body.bg-blur .wx-now,
 body.bg-blur .wx-air,
-body.bg-blur .wx-day {
+body.bg-blur .wx-chart {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -788,50 +788,76 @@ body.bg-blur .wx-day {
 .aqi--very { --aqi: #7d4ea8; }
 .aqi--hazardous { --aqi: #8c3a4a; }
 
-.wx-days {
+/* ---------- 七日温度柱状图 ---------- */
+.wx-chart {
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wx-day {
-  display: grid;
-  grid-template-columns: 56px minmax(70px, 1fr) minmax(90px, 150px) 104px;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 14px;
+  gap: 0;
+  padding: 14px 16px 12px;
   border: 1px solid var(--card-border);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--card-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
 }
 
-.wx-day__label { font-size: 13px; font-weight: 600; }
-.wx-day__cond { font-size: 13px; color: var(--fg-dim); }
-.wx-day__temp { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
-
-.wx-day__rain {
-  position: relative;
+.wx-chart__bars {
   display: flex;
+  align-items: end;
+  gap: 6px;
+  height: 120px;
+  position: relative;
+}
+
+.wx-chart__col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  height: 18px;
-  border-radius: 9px;
-  background: var(--card-border);
-  overflow: hidden;
+  justify-content: end;
+  height: 100%;
+  position: relative;
 }
-.wx-day__rain i {
-  position: absolute;
-  inset: 0 auto 0 0;
+
+.wx-chart__max,
+.wx-chart__min {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.wx-chart__max { margin-bottom: 3px; }
+.wx-chart__min { margin-top: 3px; color: var(--fg-dim); }
+
+.wx-chart__bar {
+  width: 70%;
+  max-width: 36px;
+  min-height: 8px;
+  border-radius: 6px;
   background: var(--wx-accent, var(--accent));
-  opacity: .5;
+  transition: height .3s ease, bottom .3s ease;
 }
-.wx-day__rain-text { position: relative; padding-left: 8px; font-size: 11px; }
+
+.wx-chart__labels {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.wx-chart__label {
+  flex: 1 1 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.wx-chart__day { font-size: 12px; font-weight: 600; }
+.wx-chart__cond { font-size: 11px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-chart__rain { font-size: 10px; color: var(--wx-accent, var(--accent)); opacity: .85; }
 
 /* ---------- 第 4 页 · 台风嵌入 ---------- */
 .embed {
@@ -864,7 +890,10 @@ body.bg-blur .wx-day {
   .wx-grid { grid-template-columns: 1fr; }
   .wx-now, .wx-air { grid-column: 1; }
   .wx-now__temp { font-size: 44px; }
-  .wx-day { grid-template-columns: 46px minmax(52px, 1fr) minmax(64px, 100px) 86px; gap: 8px; padding: 8px 10px; }
+  .wx-chart__bars { height: 90px; }
+  .wx-chart__max, .wx-chart__min { font-size: 10px; }
+  .wx-chart__day { font-size: 11px; }
+  .wx-chart__cond { font-size: 10px; }
 }
 
 /* 桌面端才启用整页翻页。该条件与 js/deck.js 的 DESKTOP 字符串是同一份契约，改一处必须改两处；
@@ -914,6 +943,6 @@ body.bg-blur .wx-day {
 /* 不支持 backdrop-filter 时降级为半透明纯色，保证可读性 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .site-card, .tab, .chip, .search,
-  .wx-now, .wx-air, .wx-day { background: var(--card-bg-hover); }
+  .wx-now, .wx-air, .wx-chart { background: var(--card-bg-hover); }
   .panel { background: var(--card-bg-solid); }
 }

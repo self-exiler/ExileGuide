@@ -607,7 +607,7 @@ window.NavUI = (function () {
     el.weatherGrid.textContent = '';
     el.weatherGrid.appendChild(nowCard(model.now));
     if (model.air) el.weatherGrid.appendChild(airCard(model.air));
-    el.weatherGrid.appendChild(daysList(model.days));
+    el.weatherGrid.appendChild(daysChart(model.days));
   }
 
   function fmtTemp(v) {
@@ -652,28 +652,64 @@ window.NavUI = (function () {
     return box;
   }
 
-  function daysList(days) {
-    var ul = document.createElement('ul');
-    ul.className = 'wx-days';
-    days.forEach(function (d) {
-      var li = document.createElement('li');
-      li.className = 'wx-day wx--' + d.group;
-      li.appendChild(span('wx-day__label', d.label));
-      li.appendChild(span('wx-day__cond', d.cond));
+  function daysChart(days) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wx-chart';
 
-      var rain = document.createElement('span');
-      rain.className = 'wx-day__rain';
-      rain.appendChild(span('wx-day__rain-text', d.rain == null ? '--' : d.rain + '%'));
-      if (d.rain != null) {
-        var fill = document.createElement('i');
-        fill.style.width = Math.max(0, Math.min(100, d.rain)) + '%';
-        rain.insertBefore(fill, rain.firstChild);
-      }
-      li.appendChild(rain);
-      li.appendChild(span('wx-day__temp', fmtTemp(d.max) + ' / ' + fmtTemp(d.min)));
-      ul.appendChild(li);
+    var barArea = document.createElement('div');
+    barArea.className = 'wx-chart__bars';
+
+    var globalMin = Infinity, globalMax = -Infinity;
+    days.forEach(function (d) {
+      if (d.min < globalMin) globalMin = d.min;
+      if (d.max > globalMax) globalMax = d.max;
     });
-    return ul;
+    var range = globalMax - globalMin || 1;
+
+    days.forEach(function (d) {
+      var col = document.createElement('div');
+      col.className = 'wx-chart__col wx--' + d.group;
+
+      var maxLabel = document.createElement('span');
+      maxLabel.className = 'wx-chart__max';
+      maxLabel.textContent = fmtTemp(d.max);
+      col.appendChild(maxLabel);
+
+      var bar = document.createElement('div');
+      bar.className = 'wx-chart__bar';
+      var pctH = ((d.max - d.min) / range) * 100;
+      var pctBottom = ((d.min - globalMin) / range) * 100;
+      bar.style.height = Math.max(8, pctH) + '%';
+      bar.style.bottom = pctBottom + '%';
+      if (d.rain != null && d.rain > 0) {
+        bar.style.opacity = String(0.45 + (d.rain / 100) * 0.55);
+      }
+      col.appendChild(bar);
+
+      var minLabel = document.createElement('span');
+      minLabel.className = 'wx-chart__min';
+      minLabel.textContent = fmtTemp(d.min);
+      col.appendChild(minLabel);
+
+      barArea.appendChild(col);
+    });
+    wrap.appendChild(barArea);
+
+    var labels = document.createElement('div');
+    labels.className = 'wx-chart__labels';
+    days.forEach(function (d) {
+      var cell = document.createElement('div');
+      cell.className = 'wx-chart__label';
+      cell.appendChild(span('wx-chart__day', d.label));
+      cell.appendChild(span('wx-chart__cond', d.cond));
+      if (d.rain != null && d.rain > 0) {
+        cell.appendChild(span('wx-chart__rain', d.rain + '%'));
+      }
+      labels.appendChild(cell);
+    });
+    wrap.appendChild(labels);
+
+    return wrap;
   }
 
   /* ---------------- 台风页 ---------------- */
