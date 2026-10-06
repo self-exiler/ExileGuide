@@ -14,6 +14,8 @@
   --shadow: 0 4px 18px rgba(20, 25, 40, .10);
   --accent: #4a7cf7;
   --radius: 16px;
+  --tm-bg: #d9dde6;
+  --tm-ind-bg: rgba(255, 255, 255, .5);
 }
 
 html[data-theme="dark"] {
@@ -27,6 +29,8 @@ html[data-theme="dark"] {
   --card-border: rgba(255, 255, 255, .10);
   --shadow: 0 4px 18px rgba(0, 0, 0, .35);
   --accent: #6f96ff;
+  --tm-bg: #0d0f14;
+  --tm-ind-bg: rgba(255, 255, 255, .07);
 }
 
 * { box-sizing: border-box; }
@@ -65,7 +69,10 @@ body.bg-blur #bg-layer {
 body.bg-blur .site-card,
 body.bg-blur .tab,
 body.bg-blur .chip,
-body.bg-blur .search {
+body.bg-blur .search,
+body.bg-blur .wx-now,
+body.bg-blur .wx-air,
+body.bg-blur .wx-day {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -500,6 +507,7 @@ body.bg-blur .search {
 
 /* 自定义控件默认没有 UA 焦点环，玻璃底上几乎看不见，键盘用户需要显式焦点 */
 .tab:focus-visible,
+.dot:focus-visible,
 .chip:focus-visible,
 .search-go:focus-visible,
 .bg-thumb:focus-visible,
@@ -508,6 +516,339 @@ body.bg-blur .search {
 .site-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ---------- 分页 deck ----------
+ * 基线（手机 / 触屏）：.deck 与 .page 都是普通文档流，行为与单页时代一致。
+ * 桌面端的 fixed + transform 布局见文末媒体查询。 */
+.deck { display: block; }
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.page__scroll { flex: 1 1 auto; }
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 14px 18px;
+}
+
+.page-title { margin: 0; font-size: 16px; font-weight: 600; }
+
+.page-meta { font-size: 12px; color: var(--fg-dim); white-space: nowrap; }
+
+/* 提示的是滚轮翻页，触屏上不存在该手势 */
+.page-hint { display: none; font-size: 12px; color: var(--fg-dim); }
+
+.dots {
+  position: fixed;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 30;
+}
+
+.dot {
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 1px solid var(--fg-dim);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dot[aria-current="true"] { border-color: var(--accent); background: var(--accent); }
+.dot:hover { border-color: var(--accent); }
+
+/* ---------- 第 2 页 · 大盘云图 ---------- */
+.tabs--dim { margin: 0; padding: 0; }
+.tabs--dim .tab { padding: 5px 12px; font-size: 13px; }
+
+.legend {
+  display: flex;
+  /* 不许压缩：色块一旦被压扁，9 档刻度文字会叠到右侧的时间戳上 */
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.legend-band {
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 2px 4px;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .5);
+}
+
+.tm {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 68vh;
+  margin: 0 18px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--tm-bg);
+  overflow: hidden;
+}
+
+.tm-layer { position: absolute; inset: 0; }
+
+.tm-ind,
+.tm-grp,
+.tm-leaf {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+.tm-ind { border-radius: 10px; background: var(--tm-ind-bg); }
+
+.tm-ind__bar,
+.tm-grp__bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0 7px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-ind__bar { font-size: 12px; font-weight: 600; }
+.tm-grp__bar { font-size: 11px; color: var(--fg-dim); }
+
+.tm-leaf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .45);
+  cursor: default;
+}
+
+.tm-leaf__n, .tm-leaf__v {
+  max-width: 100%;
+  padding: 0 2px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tm-leaf__n { font-size: 11px; line-height: 1.2; }
+.tm-leaf__v { font-size: 10px; line-height: 1.2; opacity: .92; }
+
+/* 文字按格子尺寸分级显隐：小格子只上色不排字，避免整页糊成噪点 */
+.tm-leaf__n, .tm-leaf__v { display: none; }
+.tm-leaf--named .tm-leaf__n { display: block; }
+.tm-leaf--named.tm-leaf--valued .tm-leaf__n { font-size: 12px; }
+.tm-leaf--valued .tm-leaf__v { display: block; }
+
+.tm-leaf:hover { outline: 2px solid #fff; outline-offset: -2px; }
+
+.tm-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 14px;
+}
+
+.tm-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--card-bg-solid);
+  box-shadow: var(--shadow);
+  color: var(--fg);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.tm-tip[hidden] { display: none; }
+.tm-tip__title { font-weight: 700; }
+
+/* ---------- 第 3 页 · 天气 ---------- */
+/* 城市标签：名称 + 当前温度角标，一眼并览三城（复用 .tab 体系） */
+.tabs--city { margin: 0; padding: 0; }
+.tabs--city .tab {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+.tab__wx {
+  font-size: 11px;
+  opacity: .75;
+  font-variant-numeric: tabular-nums;
+}
+.tab[aria-current="true"] .tab__wx { opacity: .9; }
+
+.wx {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  margin: 0 18px 18px;
+}
+
+.wx-status { margin: 0; padding: 20px 4px; color: var(--fg-dim); font-size: 14px; }
+
+.wx-grid {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.1fr) minmax(190px, .9fr);
+  gap: 14px;
+  align-content: start;
+}
+
+/* 天气分组只驱动一条侧栏强调色，卡片本体仍是统一玻璃底 */
+.wx--clear { --wx-accent: #e8a33d; }
+.wx--cloud { --wx-accent: #8f9bb0; }
+.wx--fog, .wx--drizzle { --wx-accent: #7fa8c9; }
+.wx--rain, .wx--showers { --wx-accent: var(--accent); }
+.wx--snow { --wx-accent: #9fd8ef; }
+.wx--thunder { --wx-accent: #7d4ea8; }
+
+.wx-now, .wx-air {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px 18px 24px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.wx-now::before, .wx-air::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--wx-accent, var(--accent));
+}
+.wx-air::before { background: var(--aqi, var(--wx-accent, var(--accent))); }
+
+.wx-now__temp { font-size: 54px; line-height: 1.05; font-weight: 700; }
+.wx-now__cond { font-size: 16px; color: var(--fg-dim); }
+
+.wx-facts {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 4px 10px;
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+.wx-facts__k { color: var(--fg-dim); }
+.wx-facts__v { text-align: right; font-variant-numeric: tabular-nums; }
+
+.wx-air { justify-content: center; }
+.wx-air__num { font-size: 42px; line-height: 1.05; font-weight: 700; color: var(--aqi); }
+.wx-air__band { font-size: 15px; color: var(--aqi); }
+.wx-air__sub { margin-top: 6px; font-size: 12px; color: var(--fg-dim); }
+
+.aqi--good { --aqi: #2e9e5b; }
+.aqi--moderate { --aqi: #c08a1e; }
+.aqi--usg { --aqi: #d9772a; }
+.aqi--unhealthy { --aqi: #c8403f; }
+.aqi--very { --aqi: #7d4ea8; }
+.aqi--hazardous { --aqi: #8c3a4a; }
+
+.wx-days {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wx-day {
+  display: grid;
+  grid-template-columns: 56px minmax(70px, 1fr) minmax(90px, 150px) 104px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+.wx-day__label { font-size: 13px; font-weight: 600; }
+.wx-day__cond { font-size: 13px; color: var(--fg-dim); }
+.wx-day__temp { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.wx-day__rain {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--card-border);
+  overflow: hidden;
+}
+.wx-day__rain i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--wx-accent, var(--accent));
+  opacity: .5;
+}
+.wx-day__rain-text { position: relative; padding-left: 8px; font-size: 11px; }
+
+/* ---------- 第 4 页 · 台风嵌入 ---------- */
+.embed {
+  flex: 1 1 auto;
+  min-height: 78vh;
+  margin: 0 18px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg-solid);
+  overflow: hidden;
+}
+
+.embed-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 /* ---------- 响应式 ---------- */
@@ -519,10 +860,60 @@ body.bg-blur .search {
   .site-card--pinned .site-icon { width: 52px; height: 52px; }
   .overlay { padding: 4vh 12px 12px; }
   .panel { max-height: 88vh; }
+  .wx { margin: 0 12px 12px; }
+  .wx-grid { grid-template-columns: 1fr; }
+  .wx-now, .wx-air { grid-column: 1; }
+  .wx-now__temp { font-size: 44px; }
+  .wx-day { grid-template-columns: 46px minmax(52px, 1fr) minmax(64px, 100px) 86px; gap: 8px; padding: 8px 10px; }
+}
+
+/* 桌面端才启用整页翻页。该条件与 js/deck.js 的 DESKTOP 字符串是同一份契约，改一处必须改两处；
+ * 用 hover/pointer 特性而不是纯宽度，是为了把「窄窗口桌面浏览器」与「横屏平板」区分开。 */
+@media (min-width: 861px) and (hover: hover) and (pointer: fine) {
+  html, body { height: 100%; }
+  body { overflow: hidden; }
+
+  .topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 40;
+    /* 齿轮以外的区域不吃滚轮，否则那条横带会挡住整页翻页 */
+    pointer-events: none;
+  }
+  .topbar .chip { pointer-events: auto; }
+
+  .deck {
+    position: fixed;
+    inset: 0;
+    transition: transform .52s cubic-bezier(.4, 0, .2, 1);
+  }
+  .deck--instant { transition: none; }
+
+  .page { height: 100vh; min-height: 0; overflow: hidden; }
+
+  /* 内容超高时页内自滚，滚到底才由 deck 翻页 */
+  .page__scroll { overflow-y: auto; overscroll-behavior: contain; }
+
+  .page-head { padding-left: 62px; }  /* 让开左上角齿轮 */
+  .page-meta { margin-left: auto; }    /* 桌面端行内有空间，更新时间靠右；窄屏靠换行自然排布 */
+  .page-hint { display: inline; }
+  .dots { display: flex; }
+
+  .tm, .embed { min-height: 0; }
+
+  /* 天气卡较多时页内自滚，滚到底才翻页（FR-11.5） */
+  .wx { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+  /* 右侧留一条给翻页圆点的通道：否则圆点会压在云图右缘和台风网自带的工具条上 */
+  .page--market .tm,
+  .page--weather .wx,
+  .page--typhoon .embed { margin-right: 34px; }
 }
 
 /* 不支持 backdrop-filter 时降级为半透明纯色，保证可读性 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .site-card, .tab, .chip, .search { background: var(--card-bg-hover); }
+  .site-card, .tab, .chip, .search,
+  .wx-now, .wx-air, .wx-day { background: var(--card-bg-hover); }
   .panel { background: var(--card-bg-solid); }
 }

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>导航</title>
   <link rel="preconnect" href="https://api.iowen.cn">
+  <link rel="preconnect" href="https://gateway.jrj.com">
   <link rel="icon" type="image/svg+xml" href="assets/icon/icon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/icon/favicon-32x32.png">
   <link rel="icon" href="assets/icon/favicon.ico" sizes="any">
@@ -31,17 +32,74 @@
             aria-label="打开设置" aria-haspopup="dialog" aria-expanded="false">⚙</button>
   </header>
 
-  <main id="stage" class="stage">
-    <form id="search-form" class="search" autocomplete="off">
-      <select id="engine-select" class="engine-select" aria-label="搜索引擎"></select>
-      <input id="search-input" class="search-input" type="search" placeholder="输入后回车搜索" aria-label="搜索关键词">
-      <button type="submit" class="search-go" aria-label="搜索">↵</button>
-    </form>
+  <!-- 翻页圆点：由 js/deck.js 按页构建；仅桌面显示 -->
+  <nav id="dots" class="dots" aria-label="页面切换"></nav>
 
-    <nav id="tabs" class="tabs" aria-label="分类"></nav>
-    <!-- 不设 aria-live：切换状态已由 .tab 的 aria-current 表达 -->
-    <section id="grid" class="grid"></section>
-    <p id="error" class="error" hidden></p>
+  <main id="deck" class="deck">
+    <!-- 第 1 页 · 导航 -->
+    <section class="page page--nav" aria-label="网站导航" data-page="nav">
+      <div class="page__scroll" data-scroll>
+        <div id="stage" class="stage">
+          <form id="search-form" class="search" autocomplete="off">
+            <select id="engine-select" class="engine-select" aria-label="搜索引擎"></select>
+            <input id="search-input" class="search-input" type="search" placeholder="输入后回车搜索" aria-label="搜索关键词">
+            <button type="submit" class="search-go" aria-label="搜索">↵</button>
+          </form>
+
+          <nav id="tabs" class="tabs" aria-label="分类"></nav>
+          <!-- 不设 aria-live：切换状态已由 .tab 的 aria-current 表达 -->
+          <section id="grid" class="grid"></section>
+          <p id="error" class="error" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第 2 页 · 大盘云图（数据取自金融界行情网关，见 js/market.js） -->
+    <section class="page page--market" aria-label="大盘云图" data-page="market">
+      <header class="page-head">
+        <h2 class="page-title">大盘云图</h2>
+        <nav id="market-tabs" class="tabs tabs--dim" aria-label="云图维度"></nav>
+        <span id="market-legend" class="legend" aria-hidden="true"></span>
+        <span id="market-time" class="page-meta"></span>
+        <a class="chip" href="https://summary.jrj.com.cn/dataCenter/dpyt/" target="_blank" rel="noreferrer noopener"
+           title="数据源：金融界 · 大盘云图">源站 ↗</a>
+      </header>
+      <div id="market" class="tm">
+        <p id="market-status" class="tm-status">加载中…</p>
+      </div>
+      <p id="market-error" class="error" hidden></p>
+      <div id="market-tip" class="tm-tip" role="tooltip" hidden></div>
+    </section>
+
+    <!-- 第 3 页 · 天气预报（数据源：Open-Meteo 匿名只读接口，见 js/weather.js） -->
+    <section class="page page--weather" aria-label="天气预报" data-page="weather">
+      <header class="page-head">
+        <h2 class="page-title">天气</h2>
+        <nav id="wx-tabs" class="tabs tabs--city" aria-label="天气城市"></nav>
+        <span id="weather-meta" class="page-meta"></span>
+        <button id="weather-refresh" class="chip" type="button" title="立即重新取数">刷新</button>
+      </header>
+      <div id="weather" class="wx" data-scroll>
+        <p id="weather-status" class="wx-status">加载中…</p>
+        <!-- 状态行必须留在网格外：每次渲染会整体重建 #weather-grid -->
+        <div id="weather-grid" class="wx-grid"></div>
+      </div>
+      <p id="weather-error" class="error" hidden></p>
+    </section>
+
+    <!-- 第 4 页 · 台风路径与警报（浙江省水利厅台风系统） -->
+    <section class="page page--typhoon" aria-label="台风路径与警报" data-page="typhoon">
+      <header class="page-head">
+        <h2 class="page-title">台风路径与警报</h2>
+        <span class="page-hint">地图内的滚轮归地图本身；翻页请用右侧圆点或 ↑ ↓</span>
+        <a class="chip" href="https://typhoon.slt.zj.gov.cn/" target="_blank" rel="noreferrer noopener"
+           title="数据源：浙江省水利厅 台风路径实时发布系统">新窗口打开 ↗</a>
+      </header>
+      <div class="embed">
+        <!-- src 由 js/ui.js 在首次进入本页时写入，避免打开导航页就拉一个重型 SPA -->
+        <iframe id="typhoon-frame" class="embed-frame" title="浙江省水利厅台风路径实时发布系统"></iframe>
+      </div>
+    </section>
   </main>
 
   <!-- 设置浮窗：草稿式编辑，关闭时统一应用 -->
@@ -90,6 +148,10 @@
   <script defer src="js/icons.js"></script>
   <script defer src="js/data.js"></script>
   <script defer src="js/prefs.js"></script>
+  <script defer src="js/treemap.js"></script>
+  <script defer src="js/market.js"></script>
+  <script defer src="js/weather.js"></script>
+  <script defer src="js/deck.js"></script>
   <script defer src="js/ui.js"></script>
   <script defer src="js/app.js"></script>
 </body>

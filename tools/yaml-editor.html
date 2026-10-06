@@ -111,6 +111,12 @@
     </section>
 
     <section class="card">
+      <h2>天气城市<button id="add-city" class="btn btn--sm">+ 添加城市</button></h2>
+      <p class="hint">第 3 页天气预报的预设城市：坐标填十进制度（如 <code>30.7895</code>），标签栏按此顺序显示。导航页不做城市搜索。</p>
+      <div id="cities"></div>
+    </section>
+
+    <section class="card">
       <h2>YAML 预览</h2>
       <p class="hint">只读预览：以上方表单为唯一事实源，改动实时反映到这里。保存时保留原文件头部注释块，行内手写注释不保留。</p>
       <p id="issues" class="issues"></p>
@@ -177,7 +183,8 @@
     function blankModel() {
       return {
         settings: { title: '导航', background: '', bgBlur: false },
-        searchEngines: [], backgrounds: [], categories: []
+        searchEngines: [], backgrounds: [], categories: [],
+        weather: { cities: [] }
       };
     }
 
@@ -208,10 +215,17 @@
               return { name: str(s && s.name), url: str(s && s.url), pinned: !!(s && s.pinned), desc: str(s && s.desc) };
             })
           };
-        })
+        }),
+        // 表单里坐标按字符串编辑，导出时再数值化
+        weather: {
+          cities: arr(raw.weather && raw.weather.cities).map(function (c) {
+            return { name: str(c && c.name), lat: str(c && c.lat), lon: str(c && c.lon) };
+          })
+        }
       };
       renderAll();
-      status('已载入 ' + source + '：' + model.categories.length + ' 个分类、' + countSites() + ' 个网站');
+      status('已载入 ' + source + '：' + model.categories.length + ' 个分类、' + countSites() + ' 个网站、' +
+             model.weather.cities.length + ' 座天气城市');
       return true;
     }
 
@@ -232,7 +246,49 @@
       renderEngines();
       renderBg();
       renderCats();
+      renderCities();
       syncYaml();
+    }
+
+    function validLat(v) {
+      var n = Number(String(v).trim());
+      return String(v).trim() !== '' && isFinite(n) && n >= -90 && n <= 90;
+    }
+
+    function validLon(v) {
+      var n = Number(String(v).trim());
+      return String(v).trim() !== '' && isFinite(n) && n >= -180 && n <= 180;
+    }
+
+    function renderCities() {
+      var box = $('cities');
+      box.textContent = '';
+      model.weather.cities.forEach(function (c, i) {
+        var row = el('div', 'row');
+        var name = input(c.name, '城市名', 'in--sm', function (v) {
+          c.name = v; mark(name, !c.name); syncYaml();
+        });
+        var lat = input(c.lat, '纬度 30.7895', 'in--sm', function (v) {
+          c.lat = v; mark(lat, !validLat(v)); syncYaml();
+        });
+        var lon = input(c.lon, '经度 103.8843', 'in--sm', function (v) {
+          c.lon = v; mark(lon, !validLon(v)); syncYaml();
+        });
+        row.appendChild(name);
+        row.appendChild(lat);
+        row.appendChild(lon);
+        row.appendChild(moves(model.weather.cities, i, renderCities));
+        row.appendChild(button('×', '删除', function () {
+          model.weather.cities.splice(i, 1);
+          renderCities();
+          syncYaml();
+        }));
+        box.appendChild(row);
+        mark(name, !c.name);
+        mark(lat, !validLat(c.lat));
+        mark(lon, !validLon(c.lon));
+      });
+      if (!model.weather.cities.length) box.appendChild(el('p', 'hint', '还没有天气城市'));
     }
 
     function renderSettings() {
@@ -489,8 +545,19 @@
               return o;
             })
           };
-        })
+        }),
+        weather: {
+          cities: model.weather.cities.map(function (c) {
+            return { name: c.name, lat: num(c.lat), lon: num(c.lon) };
+          }).filter(function (c) { return c.name || c.lat || c.lon; })
+        }
       };
+    }
+
+    // 坐标：能数值化就出数字（YAML 里不带引号），否则原样留字符串，让用户看得见自己填了什么
+    function num(v) {
+      var n = Number(String(v).trim());
+      return String(v).trim() !== '' && isFinite(n) ? n : String(v).trim();
     }
 
     function validate() {
@@ -508,6 +575,12 @@
           if (!isHttp(s.url)) issues.push('「' + (s.name || '未命名') + '」网址无效（须 http/https）');
           else if (!s.name) issues.push(s.url + ' 未填名称');
         });
+      });
+      model.weather.cities.forEach(function (c, i) {
+        var tag = '第 ' + (i + 1) + ' 座天气城市';
+        if (!c.name) issues.push(tag + '未填名称');
+        if (!validLat(c.lat)) issues.push((c.name || tag) + ' 纬度无效（须 -90~90 的数字）');
+        if (!validLon(c.lon)) issues.push((c.name || tag) + ' 经度无效（须 -180~180 的数字）');
       });
       return issues;
     }
@@ -625,6 +698,12 @@
     $('add-cat').addEventListener('click', function () {
       model.categories.push({ name: '新分类', sites: [] });
       renderCats();
+      syncYaml();
+    });
+
+    $('add-city').addEventListener('click', function () {
+      model.weather.cities.push({ name: '', lat: '', lon: '' });
+      renderCities();
       syncYaml();
     });
 

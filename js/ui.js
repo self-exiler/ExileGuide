@@ -2,6 +2,9 @@
  * UI 层：模型 → DOM。只认识「模型 + CSS 类名」，不做 fetch / localStorage / YAML；
  * 有副作用的交互通过 handlers 回调给 app.js。
  * 设置浮窗为草稿模式：打开时拷贝当前设置，关闭时统一 onSettingsApply(draft)。
+ * 大盘云图是个例外：行情数据由 app.js 经 NavMarket 取好后推给 onMarketData，
+ * 本层只做「树 + 行情 → 定位好的 DOM 块」，不直接发请求。
+ * 滚轮不再由本层监听：全站唯一 wheel 入口在 deck.js，本层只回答「指针是否在标签栏内」。
  */
 window.NavUI = (function () {
   'use strict';
@@ -22,10 +25,28 @@ window.NavUI = (function () {
 
   var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
 
-  var WHEEL_STEP = 40;    // 累积到多少 px 才算一次切换
-  var WHEEL_IDLE = 220;   // 静默多久后解除锁定，防止一次滑动连跳
-  var wheelAcc = 0;
-  var wheelLocked = false;
+  // 云图三级布局参数：面积 = 市值占比，每级顶部留一条标签带（格子太小则不留）
+  var TM_LEVELS = [
+    { header: 18, minW: 46, minH: 34, gap: 3 },
+    { header: 14, minW: 34, minH: 26, gap: 2 },
+    { header: 0, minW: 0, minH: 0, gap: 1 }
+  ];
+  var TM_LEAF = { hideW: 7, hideH: 7, nameW: 26, nameH: 15, valW: 44, valH: 28 };
+
+  var marketView = null;   // 当前帧数据 { dim, tree, hqs }
+  var packed = null;       // 缓存的 packTree 几何结果
+  var packedBox = null;    // packed 对应的 { tree, w, h }：树或尺寸变了才重算几何
+  var leafEls = new Map(); // sid → 个股格子，跨帧复用
+  var groupEls = new Map();
+  var indEls = new Map();
+  var tipLeaf = null;
+  var tipRaf = 0;          // tooltip 合帧句柄
+  var tipPending = null;   // 本帧待绘的 { leaf, x, y }
+  var tipBase = null;      // 缓存 #market 视口矩形：悬停期间只读一次
+  var tipSize = null;      // 缓存 tooltip 自身尺寸：仅内容重建时重算
+
+  var weatherData = [];    // 预设城市的最近一帧预报
+  var wxIndex = 0;         // 当前选中的城市下标（纯视图状态）
 
   function $(id) { return document.getElementById(id); }
 
@@ -33,6 +54,8 @@ window.NavUI = (function () {
     handlers = callbacks || {};
     el.bgLayer = $('bg-layer');
     el.title = document.querySelector('title');
+    el.deck = $('deck');
+    el.dots = $('dots');
     el.stage = $('stage');
     el.searchForm = $('search-form');
     el.searchInput = $('search-input');
@@ -40,6 +63,20 @@ window.NavUI = (function () {
     el.tabs = $('tabs');
     el.grid = $('grid');
     el.error = $('error');
+    el.market = $('market');
+    el.marketTabs = $('market-tabs');
+    el.marketLegend = $('market-legend');
+    el.marketTime = $('market-time');
+    el.marketStatus = $('market-status');
+    el.marketError = $('market-error');
+    el.marketTip = $('market-tip');
+    el.typhoonFrame = $('typhoon-frame');
+    el.wxCities = $('wx-tabs');
+    el.weatherGrid = $('weather-grid');
+    el.weatherStatus = $('weather-status');
+    el.weatherError = $('weather-error');
+    el.weatherMeta = $('weather-meta');
+    el.weatherRefresh = $('weather-refresh');
     el.settingsToggle = $('settings-toggle');
     el.overlay = $('settings-overlay');
     el.panel = $('settings-panel');
@@ -55,6 +92,10 @@ window.NavUI = (function () {
       if (!q) return;
       if (handlers.onSearch) handlers.onSearch(q, el.engineSelect.value);
       el.searchInput.value = '';
+    });
+
+    el.weatherRefresh.addEventListener('click', function () {
+      if (handlers.onWeatherRefresh) handlers.onWeatherRefresh();
     });
 
     el.settingsToggle.addEventListener('click', openSettings);
@@ -81,28 +122,30 @@ window.NavUI = (function () {
       if (settings && settings.theme === 'auto') paintTheme();
     });
 
-    // 悬停在分类区时用滚轮切标签。需 passive:false 才能 preventDefault 阻止页面滚动。
-    if (el.stage) el.stage.addEventListener('wheel', function (ev) {
-      // deltaMode 归一化成像素：Firefox 鼠标滚轮常为 DOM_DELTA_LINE（每格约 3 行），
-      // 直接按原值累计会导致 WHEEL_STEP 要滚十几下才切换。
-      var scale = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 100 : 1;
-      var dy = ev.deltaY * scale;
-      var dx = ev.deltaX * scale;
-      // 只接管纵向滚动；触控板横向手势放行
-      if (Math.abs(dy) <= Math.abs(dx)) return;
-      if (draft) return; // 浮窗 .overlay 已 fixed 铺满视口，滚轮本走不到这里；留作 DOM 结构变动的护栏
-      ev.preventDefault();
-      if (wheelLocked) return;
-      wheelAcc += dy;
-      if (Math.abs(wheelAcc) < WHEEL_STEP) return;
-      var dir = wheelAcc > 0 ? 1 : -1;
-      wheelAcc = 0;
-      wheelLocked = true;
-      // 锁定到滚动停歇，避免一次惯性滑动连跳多个分类
-      setTimeout(function () { wheelLocked = false; }, WHEEL_IDLE);
-      stepTab(dir);
-    }, { passive: false });
+    // 悬停个股格子时的浮动信息：委托到容器，避免给上千个格子各挂一个监听。
+    // 合帧绘制：mousemove 每帧可触发多次，逐次「读 getBoundingClientRect 再写 transform」
+    // 会在含上千格子的子树上反复强制回流；改为每帧至多绘一次，并缓存矩形（见 showTip）。
+    el.market.addEventListener('mousemove', function (ev) {
+      scheduleTip(ev.target && ev.target.closest ? ev.target.closest('.tm-leaf') : null, ev.clientX, ev.clientY);
+    });
+    el.market.addEventListener('mouseleave', function () {
+      tipPending = null;
+      if (tipRaf) { cancelAnimationFrame(tipRaf); tipRaf = 0; }
+      hideTip();
+    });
+
+    if (window.ResizeObserver) {
+      new ResizeObserver(function () { if (marketView) layoutMarket(); }).observe(el.market);
+    }
   }
+
+  // 供 deck.js 判定滚轮归属：首页标签栏内翻标签，其余翻整页
+  function isTabArea(target) {
+    return !!(target && target.closest && target.closest('#tabs'));
+  }
+
+  // 设置浮窗打开时 deck 不接管滚轮与键盘
+  function settingsOpen() { return !!draft; }
 
   // 环形切换：末项向下回首页，首项向上回末项。
   // activeTab 用 -1 表示首页、0..n-1 表示分类，与 0-based 索引不同源，故不走取模。
@@ -264,6 +307,385 @@ window.NavUI = (function () {
     return node;
   }
 
+  /* ---------------- 大盘云图 ---------------- */
+
+  // 三层平铺：行业 / 二级 / 个股。同级互不重叠、层间由后往前覆盖，
+  // 因此所有块都用 packTree 算出的绝对坐标直接摆，不需要嵌套定位。
+  function tmLayers() {
+    if (!el.tmLayers) {
+      el.tmLayers = ['tm-ind', 'tm-grp', 'tm-leaf'].map(function () {
+        var layer = document.createElement('div');
+        layer.className = 'tm-layer';
+        el.market.appendChild(layer);
+        return layer;
+      });
+    }
+    return el.tmLayers;
+  }
+
+  function renderMarketTabs(dims, activeKey) {
+    el.marketTabs.textContent = '';
+    dims.forEach(function (dim) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tab';
+      btn.textContent = dim.label;
+      btn.dataset.key = dim.key;
+      btn.setAttribute('aria-current', String(dim.key === activeKey));
+      btn.addEventListener('click', function () {
+        if (btn.getAttribute('aria-current') === 'true') return;
+        Array.prototype.forEach.call(el.marketTabs.children, function (child) {
+          child.setAttribute('aria-current', String(child === btn));
+        });
+        if (handlers.onMarketDim) handlers.onMarketDim(dim.key);
+      });
+      el.marketTabs.appendChild(btn);
+    });
+  }
+
+  function renderLegend(dim) {
+    el.marketLegend.textContent = '';
+    NavMarket.legendOf(dim).forEach(function (band) {
+      var cell = document.createElement('span');
+      cell.className = 'legend-band';
+      cell.style.background = band.color;
+      cell.textContent = band.label;
+      el.marketLegend.appendChild(cell);
+    });
+  }
+
+  function marketMessage(text) {
+    el.marketStatus.hidden = !text;
+    el.marketStatus.textContent = text || '';
+  }
+
+  function marketError(text) {
+    el.marketError.hidden = !text;
+    el.marketError.textContent = text ? '云图数据加载失败：' + text : '';
+  }
+
+  function onMarketData(payload) {
+    marketView = { dim: payload.dim, tree: payload.tree, hqs: payload.hqs || {} };
+    marketMessage('');
+    marketError('');
+    el.marketTime.textContent = NavMarket.tradingStamp(payload.td, payload.tm);
+    renderLegend(payload.dim);
+    layoutMarket();
+  }
+
+  function layoutMarket() {
+    var view = marketView;
+    if (!view) return;
+    var w = el.market.clientWidth;
+    var h = el.market.clientHeight;
+    // 容器尚无有效尺寸（手机未展开、页面刚切换）时跳过，ResizeObserver 会再叫一次
+    if (w < 240 || h < 160) return;
+
+    // 几何只取决于「树权重 + 容器尺寸」：轮询与切维度时二者都不变，直接复用上次 packTree 结果，
+    // 跳过对全树 5000+ 节点的重算，只重绘颜色与文字（对齐 FR-12.5「每轮只改样式与文本」）。
+    var repacked = !(packed && packedBox &&
+                     packedBox.tree === view.tree && packedBox.w === w && packedBox.h === h);
+    if (repacked) {
+      packed = NavTreemap.packTree(view.tree, { x: 0, y: 0, w: w, h: h }, TM_LEVELS);
+      packedBox = { tree: view.tree, w: w, h: h };
+      tipBase = null;   // 尺寸变了，缓存的容器矩形作废
+    }
+
+    var layers = tmLayers();
+    var seen = { ind: new Set(), grp: new Set(), leaf: new Set() };
+
+    function block(map, key, layer, cls, barCls) {
+      var box = map.get(key);
+      if (box) return box;
+      box = document.createElement('div');
+      box.className = cls;
+      if (barCls) {
+        var bar = document.createElement('span');
+        bar.className = barCls;
+        box.appendChild(bar);
+        box.bar = bar;
+      }
+      layer.appendChild(box);
+      map.set(key, box);
+      return box;
+    }
+
+    function place(box, n) {
+      box.style.transform = 'translate(' + Math.round(n.x) + 'px,' + Math.round(n.y) + 'px)';
+      box.style.width = Math.round(n.w) + 'px';
+      box.style.height = Math.round(n.h) + 'px';
+      if (box.bar) {
+        box.bar.hidden = n.header <= 0;
+        box.bar.style.height = n.header + 'px';
+      }
+    }
+
+    // 接口给的 scale 是「占父级」的比重，tooltip 要的是全市场比重，逐级乘下来
+    function walk(nodes, level, path, shareIn) {
+      nodes.forEach(function (n) {
+        var share = shareIn * n.node.weight / 100;
+        if (level === 2) { leaf(n, share); return; }
+        var isInd = level === 0;
+        var map = isInd ? indEls : groupEls;
+        var key = isInd ? n.node.name : path + n.node.name;
+        (isInd ? seen.ind : seen.grp).add(key);
+        var box = block(map, key, layers[level],
+          isInd ? 'tm-ind' : 'tm-grp',
+          isInd ? 'tm-ind__bar' : 'tm-grp__bar');
+        if (repacked) {
+          place(box, n);
+          // 行业带文字含占比（权重派生，跨维度/轮询恒定），几何不变时无需重写
+          box.bar.textContent = isInd
+            ? n.node.name + ' ' + share.toFixed(1) + '%'
+            : n.node.name;
+        }
+        walk(n.children, level + 1, key + '/', share);
+      });
+    }
+
+    function leaf(n, share) {
+      var stock = n.node;
+      if (n.w < TM_LEAF.hideW || n.h < TM_LEAF.hideH) return;   // 亚像素块直接丢弃，省上千个节点
+      var key = String(stock.sid);
+      seen.leaf.add(key);
+      var box = leafEls.get(key);
+      if (!box) {
+        box = document.createElement('div');
+        box.className = 'tm-leaf';
+        box.nameEl = document.createElement('span');
+        box.nameEl.className = 'tm-leaf__n';
+        box.valEl = document.createElement('span');
+        box.valEl.className = 'tm-leaf__v';
+        box.appendChild(box.nameEl);
+        box.appendChild(box.valEl);
+        leafEls.set(key, box);
+      }
+      if (!box.parentNode) layers[2].appendChild(box);
+      var quote = view.hqs[key];
+      var raw = quote ? quote.var : null;
+      if (repacked) {
+        place(box, n);
+        box.classList.toggle('tm-leaf--named', n.w >= TM_LEAF.nameW && n.h >= TM_LEAF.nameH);
+        box.classList.toggle('tm-leaf--valued', n.w >= TM_LEAF.valW && n.h >= TM_LEAF.valH);
+      }
+      box.style.background = NavMarket.colorOf(view.dim, raw);
+      box.nameEl.textContent = stock.name;
+      box.valEl.textContent = NavMarket.textOf(view.dim, raw);
+      box.info = {
+        sid: key,
+        name: stock.name,
+        code: stock.code,
+        price: quote && quote.np != null ? quote.np : null,
+        dim: view.dim.label,
+        value: NavMarket.textOf(view.dim, raw),
+        share: share
+      };
+    }
+
+    walk(packed, 0, '', 100);
+    prune(indEls, seen.ind);
+    prune(groupEls, seen.grp);
+    prune(leafEls, seen.leaf);
+  }
+
+  function prune(map, keep) {
+    map.forEach(function (box, key) {
+      if (keep.has(key)) return;
+      map.delete(key);
+      if (box.parentNode) box.parentNode.removeChild(box);
+    });
+  }
+
+  /* ---------------- 云图浮动信息 ---------------- */
+
+  function scheduleTip(leaf, x, y) {
+    tipPending = { leaf: leaf, x: x, y: y };
+    if (tipRaf) return;
+    tipRaf = requestAnimationFrame(function () {
+      tipRaf = 0;
+      var p = tipPending;
+      if (p) showTip(p.leaf, p.x, p.y);
+    });
+  }
+
+  function hideTip() {
+    tipLeaf = null;
+    tipBase = null;
+    tipSize = null;
+    el.marketTip.hidden = true;
+  }
+
+  // tooltip 定位在 #market 的坐标系里：deck 带 transform，其后代的 fixed
+  // 参照物会变成 deck 本身，故不用视口坐标而用云图容器坐标。
+  // 每帧至多调用一次（见 scheduleTip）；矩形缓存后，稳定悬停期间只写 transform、不读布局。
+  function showTip(leaf, x, y) {
+    if (!leaf || !leaf.info) {
+      if (tipLeaf) hideTip();
+      return;
+    }
+    tipLeaf = leaf;
+    var info = leaf.info;
+    if (el.marketTip.dataset.key !== info.sid) {
+      el.marketTip.dataset.key = info.sid;
+      el.marketTip.textContent = '';
+      addTipLine(el.marketTip, info.name + ' ' + info.code, 'tm-tip__title');
+      addTipLine(el.marketTip, '现价 ' + (info.price == null ? '--' : info.price), '');
+      addTipLine(el.marketTip, info.dim + ' ' + info.value, '');
+      addTipLine(el.marketTip, '全市场占比 ' + info.share.toFixed(2) + '%', '');
+      tipSize = null;   // 内容变了，尺寸作废，本帧重算一次
+    }
+    el.marketTip.hidden = false;
+
+    if (!tipBase) tipBase = el.market.getBoundingClientRect();
+    if (!tipSize) tipSize = el.marketTip.getBoundingClientRect();
+    var left = x - tipBase.left + 14;
+    var top = y - tipBase.top + 16;
+    if (left + tipSize.width > tipBase.width - 4) left = x - tipBase.left - tipSize.width - 14;
+    if (top + tipSize.height > tipBase.height - 4) top = y - tipBase.top - tipSize.height - 16;
+    el.marketTip.style.transform = 'translate(' + Math.max(4, left) + 'px,' + Math.max(4, top) + 'px)';
+  }
+
+  function addTipLine(parent, text, cls) {
+    var line = document.createElement('span');
+    if (cls) line.className = cls;
+    line.textContent = text;
+    parent.appendChild(line);
+  }
+
+  /* ---------------- 第 3 页 · 天气 ---------------- */
+
+  function weatherMessage(text) {
+    el.weatherStatus.hidden = !text;
+    el.weatherStatus.textContent = text || '';
+  }
+
+  // 出错只加一行提示，保留上一帧画面（与云图 FR-12.7 同一处置原则）
+  function weatherError(text) {
+    el.weatherError.hidden = !text;
+    el.weatherError.textContent = text ? '天气数据加载失败：' + text : '';
+  }
+
+  // 一次请求回全部预设城市；选中哪座城市只是本页视图状态，不落盘、不回源
+  function onWeatherData(list) {
+    weatherData = list;
+    if (wxIndex >= list.length) wxIndex = 0;
+    weatherMessage('');
+    weatherError('');
+    renderCityTabs();
+    renderWeather();
+  }
+
+  function renderCityTabs() {
+    el.wxCities.textContent = '';
+    weatherData.forEach(function (model, i) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tab';
+      btn.appendChild(document.createTextNode(model.city.name));
+      var badge = document.createElement('span');
+      badge.className = 'tab__wx';
+      badge.textContent = fmtTemp(model.now.temp) + ' ' + model.now.cond;
+      btn.appendChild(badge);
+      btn.setAttribute('aria-current', String(i === wxIndex));
+      btn.addEventListener('click', function () {
+        if (i === wxIndex) return;
+        wxIndex = i;
+        Array.prototype.forEach.call(el.wxCities.children, function (child, j) {
+          child.setAttribute('aria-current', String(j === i));
+        });
+        renderWeather();
+      });
+      el.wxCities.appendChild(btn);
+    });
+  }
+
+  function renderWeather() {
+    var model = weatherData[wxIndex];
+    if (!model) return;
+    el.weatherMeta.textContent = model.city.name + (model.updated ? ' · ' + model.updated.replace('T', ' ') + ' 更新' : '');
+    // 只重建网格，不动状态行：状态行与卡片同级，整体清空容器会把它一起删掉
+    el.weatherGrid.textContent = '';
+    el.weatherGrid.appendChild(nowCard(model.now));
+    if (model.air) el.weatherGrid.appendChild(airCard(model.air));
+    el.weatherGrid.appendChild(daysList(model.days));
+  }
+
+  function fmtTemp(v) {
+    return v == null || isNaN(v) ? '--' : Math.round(v) + '°';
+  }
+
+  function span(cls, text) {
+    var node = document.createElement('span');
+    node.className = cls;
+    node.textContent = text;
+    return node;
+  }
+
+  function nowCard(now) {
+    var card = document.createElement('div');
+    card.className = 'wx-now wx--' + now.group;
+    var temp = document.createElement('strong');
+    temp.className = 'wx-now__temp';
+    temp.textContent = fmtTemp(now.temp);
+    card.appendChild(temp);
+    card.appendChild(span('wx-now__cond', now.cond));
+
+    var facts = document.createElement('dl');
+    facts.className = 'wx-facts';
+    [['体感', fmtTemp(now.feels)], ['湿度', now.humidity == null ? '--' : now.humidity + '%'],
+     ['风速', now.wind == null ? '--' : now.wind + ' km/h'],
+     ['降水', (now.precip == null ? 0 : now.precip) + ' mm']].forEach(function (pair) {
+      facts.appendChild(span('wx-facts__k', pair[0]));
+      facts.appendChild(span('wx-facts__v', pair[1]));
+    });
+    card.appendChild(facts);
+    return card;
+  }
+
+  function airCard(air) {
+    var box = document.createElement('div');
+    box.className = 'wx-air ' + air.band.cls;
+    box.appendChild(span('wx-air__num', String(air.aqi)));
+    box.appendChild(span('wx-air__band', air.band.label));
+    box.appendChild(span('wx-air__sub',
+      '美标 AQI · PM2.5 ' + (air.pm25 == null ? '--' : air.pm25) + ' · PM10 ' + (air.pm10 == null ? '--' : air.pm10)));
+    return box;
+  }
+
+  function daysList(days) {
+    var ul = document.createElement('ul');
+    ul.className = 'wx-days';
+    days.forEach(function (d) {
+      var li = document.createElement('li');
+      li.className = 'wx-day wx--' + d.group;
+      li.appendChild(span('wx-day__label', d.label));
+      li.appendChild(span('wx-day__cond', d.cond));
+
+      var rain = document.createElement('span');
+      rain.className = 'wx-day__rain';
+      rain.appendChild(span('wx-day__rain-text', d.rain == null ? '--' : d.rain + '%'));
+      if (d.rain != null) {
+        var fill = document.createElement('i');
+        fill.style.width = Math.max(0, Math.min(100, d.rain)) + '%';
+        rain.insertBefore(fill, rain.firstChild);
+      }
+      li.appendChild(rain);
+      li.appendChild(span('wx-day__temp', fmtTemp(d.max) + ' / ' + fmtTemp(d.min)));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+
+  /* ---------------- 台风页 ---------------- */
+
+  // 重型 SPA，只在首次进入第 4 页时才真正挂载
+  function mountTyphoon() {
+    var frame = el.typhoonFrame;
+    if (!frame || frame.dataset.mounted) return;
+    frame.dataset.mounted = '1';
+    frame.src = 'https://typhoon.slt.zj.gov.cn/';
+  }
+
   /* ---------------- 设置 ---------------- */
 
   function applySettings(next) {
@@ -389,6 +811,20 @@ window.NavUI = (function () {
     init: init,
     render: render,
     applySettings: applySettings,
-    showError: showError
+    showError: showError,
+    // 供 deck.js 使用
+    isTabArea: isTabArea,
+    settingsOpen: settingsOpen,
+    stepTab: stepTab,
+    // 供 app.js 接线云图与嵌入页
+    renderMarketTabs: renderMarketTabs,
+    onMarketData: onMarketData,
+    marketMessage: marketMessage,
+    marketError: marketError,
+    mountTyphoon: mountTyphoon,
+    // 供 app.js 接线天气页
+    onWeatherData: onWeatherData,
+    weatherMessage: weatherMessage,
+    weatherError: weatherError
   };
 })();

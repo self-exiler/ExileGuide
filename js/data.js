@@ -1,6 +1,6 @@
 /**
  * 数据层：data/sites.yml → 归一化模型（UI 层唯一依赖的数据结构）
- * { settings, searchEngines, backgrounds, categories, pinned }
+ * { settings, searchEngines, backgrounds, categories, pinned, weather }
  * 本文件不做任何 DOM 操作。
  */
 window.NavData = (function () {
@@ -59,12 +59,25 @@ window.NavData = (function () {
       categories.push({ name: name, sites: sites });
     });
 
+    // 天气预设城市：name 必填，坐标须是范围内的十进制度；无效条目照单条原则丢弃
+    var cities = (Array.isArray(raw.weather && raw.weather.cities) ? raw.weather.cities : [])
+      .map(function (c) {
+        if (!c || typeof c !== 'object') return null;
+        var name = String(c.name || '').trim();
+        var lat = Number(c.lat);
+        var lon = Number(c.lon);
+        if (!name || !isFinite(lat) || !isFinite(lon)) return null;
+        if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+        return { name: name, lat: lat, lon: lon };
+      }).filter(Boolean);
+
     return {
       settings: settings,
       searchEngines: searchEngines,
       backgrounds: backgrounds,
       categories: categories,
-      pinned: pinned
+      pinned: pinned,
+      weather: { cities: cities }
     };
   }
 

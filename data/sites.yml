@@ -4,6 +4,9 @@
 # searchEngines 搜索框引擎列表，首个为默认；%s 为关键词占位符
 # backgrounds   背景切换器候选图（仓库相对路径）
 # categories    分类；站点加 pinned: true 即出现在首页大图标区
+# weather       第 3 页天气预报的预设城市：cities 每条 = name + lat + lon（十进制度）
+#               标签栏按列表顺序显示，页内不做城市搜索；加一座城就加一条。
+#               注意：只有文件开头这一段注释会在编辑器保存时保留，正文里的行内注释会被丢弃。
 
 settings:
   title: 我的导航
@@ -80,6 +83,9 @@ categories:
       - name: DanbooruSearch
         url: https://huggingface.co/spaces/SAkizuki/DanbooruSearch
         desc: Danbooru 标签搜索，支持中文模糊匹配，提供 REST API 与 MCP 协议
+      - name: AgentRouter
+        url: https://agentrouter.org/
+        desc: 公益中转站
   - name: 开发
     sites:
       - name: Github
@@ -153,3 +159,14 @@ categories:
         url: https://thwiki.cc/
       - name: 魔法禁书目录维基
         url: https://toaru.huijiwiki.com/
+weather:
+  cities:
+    - name: 泰州靖江市
+      lat: 32.02
+      lon: 120.06
+    - name: 宁波鄞州区
+      lat: 29.8119
+      lon: 121.5445
+    - name: 成都郫都区
+      lat: 30.7895
+      lon: 103.8843
