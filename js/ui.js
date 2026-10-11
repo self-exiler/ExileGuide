@@ -608,6 +608,9 @@ window.NavUI = (function () {
     el.weatherGrid.appendChild(nowCard(model.now));
     if (model.air) el.weatherGrid.appendChild(airCard(model.air));
     el.weatherGrid.appendChild(daysChart(model.days));
+    var region = model.city.oilRegion;
+    if (region && oilData[region]) el.weatherGrid.appendChild(oilCard(oilData[region]));
+    ensureOil(region);
   }
 
   function fmtTemp(v) {
@@ -710,6 +713,58 @@ window.NavUI = (function () {
     wrap.appendChild(labels);
 
     return wrap;
+  }
+
+  /* ---------------- 当地油价 ---------------- */
+
+  var oilData = {};      // region -> 模型；null 表示已取过且失败，本会话不再重试
+  var oilPending = {};
+
+  function ensureOil(region) {
+    if (!region || oilData[region] !== undefined || oilPending[region]) return;
+    oilPending[region] = true;
+    NavOil.load(region).then(function (model) {
+      delete oilPending[region];
+      oilData[region] = model || null;
+      if (!model) return;
+      var shown = weatherData[wxIndex];
+      if (shown && shown.city.oilRegion === region) renderWeather();
+    });
+  }
+
+  var OIL_DIR = { '上调': 'up', '下调': 'down', '搁浅': 'flat' };
+
+  function oilCard(oil) {
+    var box = document.createElement('div');
+    box.className = 'wx-oil';
+    box.appendChild(span('wx-oil__head', (oil.region || '本地') + ' · 当前油价'));
+
+    var grid = document.createElement('div');
+    grid.className = 'wx-oil__grid';
+    oil.prices.forEach(function (p) {
+      var item = document.createElement('div');
+      item.className = 'wx-oil__item';
+      item.appendChild(span('wx-oil__k', p.label));
+      item.appendChild(span('wx-oil__v', p.price == null || isNaN(p.price) ? '--' : Number(p.price).toFixed(2)));
+      grid.appendChild(item);
+    });
+    box.appendChild(grid);
+
+    if (oil.next) {
+      var next = document.createElement('p');
+      next.className = 'wx-oil__next';
+      next.appendChild(span('wx-oil__k', '下次调价'));
+      next.appendChild(span('wx-oil__date', oil.next));
+      if (oil.direction) {
+        var badge = span('wx-oil__dir', oil.direction);
+        badge.classList.add('wx-oil__dir--' + (OIL_DIR[oil.direction] || 'flat'));
+        next.appendChild(badge);
+      }
+      if (oil.range) next.appendChild(span('wx-oil__range', oil.range));
+      box.appendChild(next);
+    }
+    if (oil.updated) box.appendChild(span('wx-oil__upd', oil.updated + ' 更新'));
+    return box;
   }
 
   /* ---------------- 台风页 ---------------- */

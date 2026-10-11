@@ -59,7 +59,7 @@ window.NavData = (function () {
       categories.push({ name: name, sites: sites });
     });
 
-    // 天气预设城市：name 必填，坐标须是范围内的十进制度；无效条目照单条原则丢弃
+    // 天气预设城市：name 必填，坐标须是范围内的十进制度；oilRegion 供油价卡片取数，留空则该城市不显示油价
     var cities = (Array.isArray(raw.weather && raw.weather.cities) ? raw.weather.cities : [])
       .map(function (c) {
         if (!c || typeof c !== 'object') return null;
@@ -68,7 +68,7 @@ window.NavData = (function () {
         var lon = Number(c.lon);
         if (!name || !isFinite(lat) || !isFinite(lon)) return null;
         if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-        return { name: name, lat: lat, lon: lon };
+        return { name: name, lat: lat, lon: lon, oilRegion: String(c.oilRegion || '').trim() };
       }).filter(Boolean);
 
     return {
