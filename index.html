@@ -38,9 +38,9 @@
 
   <main id="deck" class="deck">
     <!-- 第 1 页 · 导航 -->
-    <section class="page page--nav" aria-label="网站导航" data-page="nav">
+    <section class="page page--nav" aria-label="网站导航">
       <div class="page__scroll" data-scroll>
-        <div id="stage" class="stage">
+        <div class="stage">
           <form id="search-form" class="search" autocomplete="off">
             <select id="engine-select" class="engine-select" aria-label="搜索引擎"></select>
             <input id="search-input" class="search-input" type="search" placeholder="输入后回车搜索" aria-label="搜索关键词">
@@ -56,7 +56,7 @@
     </section>
 
     <!-- 第 2 页 · 大盘云图（数据取自金融界行情网关，见 js/market.js） -->
-    <section class="page page--market" aria-label="大盘云图" data-page="market">
+    <section class="page page--market" aria-label="大盘云图">
       <header class="page-head">
         <h2 class="page-title">大盘云图</h2>
         <nav id="market-tabs" class="tabs tabs--dim" aria-label="云图维度"></nav>
@@ -73,14 +73,14 @@
     </section>
 
     <!-- 第 3 页 · 天气预报（数据源：Open-Meteo 匿名只读接口，见 js/weather.js） -->
-    <section class="page page--weather" aria-label="天气预报" data-page="weather">
+    <section class="page page--weather" aria-label="天气预报">
       <header class="page-head">
         <h2 class="page-title">天气</h2>
         <nav id="wx-tabs" class="tabs tabs--city" aria-label="天气城市"></nav>
         <span id="weather-meta" class="page-meta"></span>
         <button id="weather-refresh" class="chip" type="button" title="立即重新取数">刷新</button>
       </header>
-      <div id="weather" class="wx" data-scroll>
+      <div class="wx" data-scroll>
         <p id="weather-status" class="wx-status">加载中…</p>
         <!-- 状态行必须留在网格外：每次渲染会整体重建 #weather-grid -->
         <div id="weather-grid" class="wx-grid"></div>
@@ -89,7 +89,7 @@
     </section>
 
     <!-- 第 4 页 · 台风路径与警报（浙江省水利厅台风系统） -->
-    <section class="page page--typhoon" aria-label="台风路径与警报" data-page="typhoon">
+    <section class="page page--typhoon" aria-label="台风路径与警报">
       <header class="page-head">
         <h2 class="page-title">台风路径与警报</h2>
         <span class="page-hint">地图内的滚轮归地图本身；翻页请用右侧圆点或 ↑ ↓</span>

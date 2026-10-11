@@ -268,7 +268,7 @@ body.bg-blur .wx-chart {
 
 .site-card--pinned .site-tile__char { font-size: 26px; }
 
-/* 域名小字仅 64px 大图标有空间显示 */
+/* 域名小字只在首页大图标卡片里显示（窄屏 52px 下也显示，故按 --pinned 判定而非按尺寸） */
 .site-tile__sub {
   display: none;
   max-width: 100%;

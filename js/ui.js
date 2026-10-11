@@ -4,7 +4,7 @@
  * 设置浮窗为草稿模式：打开时拷贝当前设置，关闭时统一 onSettingsApply(draft)。
  * 大盘云图是个例外：行情数据由 app.js 经 NavMarket 取好后推给 onMarketData，
  * 本层只做「树 + 行情 → 定位好的 DOM 块」，不直接发请求。
- * 滚轮不再由本层监听：全站唯一 wheel 入口在 deck.js，本层只回答「指针是否在标签栏内」。
+ * 滚轮不由本层监听：全站唯一 wheel 入口在 deck.js，本层只回答「指针是否在标签栏内」。
  */
 window.NavUI = (function () {
   'use strict';
@@ -54,9 +54,6 @@ window.NavUI = (function () {
     handlers = callbacks || {};
     el.bgLayer = $('bg-layer');
     el.title = document.querySelector('title');
-    el.deck = $('deck');
-    el.dots = $('dots');
-    el.stage = $('stage');
     el.searchForm = $('search-form');
     el.searchInput = $('search-input');
     el.engineSelect = $('engine-select');
@@ -297,7 +294,7 @@ window.NavUI = (function () {
     charEl.textContent = tile.char;
     node.appendChild(charEl);
 
-    // 域名小字仅 64px 大图标有空间显示（是否显示由 CSS 控制）
+    // 域名小字是否显示由 CSS 决定（仅 --pinned 卡片）
     if (tile.host) {
       var sub = document.createElement('span');
       sub.className = 'site-tile__sub';
@@ -323,6 +320,14 @@ window.NavUI = (function () {
     return el.tmLayers;
   }
 
+  // 分段控件统一切换当前态：children 里命中 match 的置 true，其余清空。
+  // 页头维度/城市标签与浮窗背景/主题四处都是同一套写法。
+  function markCurrent(box, attr, match) {
+    [...box.children].forEach(function (node, i) {
+      node.setAttribute(attr, String(match(node, i)));
+    });
+  }
+
   function renderMarketTabs(dims, activeKey) {
     el.marketTabs.textContent = '';
     dims.forEach(function (dim) {
@@ -330,13 +335,10 @@ window.NavUI = (function () {
       btn.type = 'button';
       btn.className = 'tab';
       btn.textContent = dim.label;
-      btn.dataset.key = dim.key;
       btn.setAttribute('aria-current', String(dim.key === activeKey));
       btn.addEventListener('click', function () {
         if (btn.getAttribute('aria-current') === 'true') return;
-        Array.prototype.forEach.call(el.marketTabs.children, function (child) {
-          child.setAttribute('aria-current', String(child === btn));
-        });
+        markCurrent(el.marketTabs, 'aria-current', function (node) { return node === btn; });
         if (handlers.onMarketDim) handlers.onMarketDim(dim.key);
       });
       el.marketTabs.appendChild(btn);
@@ -354,14 +356,18 @@ window.NavUI = (function () {
     });
   }
 
+  // 状态行与错误行共用一套「有文本才显示」的写法；prefix 缺省即原样显示
+  function setMsg(node, text, prefix) {
+    node.hidden = !text;
+    node.textContent = text ? (prefix || '') + text : '';
+  }
+
   function marketMessage(text) {
-    el.marketStatus.hidden = !text;
-    el.marketStatus.textContent = text || '';
+    setMsg(el.marketStatus, text);
   }
 
   function marketError(text) {
-    el.marketError.hidden = !text;
-    el.marketError.textContent = text ? '云图数据加载失败：' + text : '';
+    setMsg(el.marketError, text, '云图数据加载失败：');
   }
 
   function onMarketData(payload) {
@@ -555,14 +561,12 @@ window.NavUI = (function () {
   /* ---------------- 第 3 页 · 天气 ---------------- */
 
   function weatherMessage(text) {
-    el.weatherStatus.hidden = !text;
-    el.weatherStatus.textContent = text || '';
+    setMsg(el.weatherStatus, text);
   }
 
   // 出错只加一行提示，保留上一帧画面（与云图 FR-12.7 同一处置原则）
   function weatherError(text) {
-    el.weatherError.hidden = !text;
-    el.weatherError.textContent = text ? '天气数据加载失败：' + text : '';
+    setMsg(el.weatherError, text, '天气数据加载失败：');
   }
 
   // 一次请求回全部预设城市；选中哪座城市只是本页视图状态，不落盘、不回源
@@ -577,22 +581,20 @@ window.NavUI = (function () {
 
   function renderCityTabs() {
     el.wxCities.textContent = '';
-    weatherData.forEach(function (model, i) {
+    weatherData.forEach(function (fc, i) {
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'tab';
-      btn.appendChild(document.createTextNode(model.city.name));
+      btn.appendChild(document.createTextNode(fc.city.name));
       var badge = document.createElement('span');
       badge.className = 'tab__wx';
-      badge.textContent = fmtTemp(model.now.temp) + ' ' + model.now.cond;
+      badge.textContent = fmtTemp(fc.now.temp) + ' ' + fc.now.cond;
       btn.appendChild(badge);
       btn.setAttribute('aria-current', String(i === wxIndex));
       btn.addEventListener('click', function () {
         if (i === wxIndex) return;
         wxIndex = i;
-        Array.prototype.forEach.call(el.wxCities.children, function (child, j) {
-          child.setAttribute('aria-current', String(j === i));
-        });
+        markCurrent(el.wxCities, 'aria-current', function (node, j) { return j === i; });
         renderWeather();
       });
       el.wxCities.appendChild(btn);
@@ -600,15 +602,15 @@ window.NavUI = (function () {
   }
 
   function renderWeather() {
-    var model = weatherData[wxIndex];
-    if (!model) return;
-    el.weatherMeta.textContent = model.city.name + (model.updated ? ' · ' + model.updated.replace('T', ' ') + ' 更新' : '');
+    var fc = weatherData[wxIndex];
+    if (!fc) return;
+    el.weatherMeta.textContent = fc.city.name + (fc.updated ? ' · ' + fc.updated.replace('T', ' ') + ' 更新' : '');
     // 只重建网格，不动状态行：状态行与卡片同级，整体清空容器会把它一起删掉
     el.weatherGrid.textContent = '';
-    el.weatherGrid.appendChild(nowCard(model.now));
-    if (model.air) el.weatherGrid.appendChild(airCard(model.air));
-    el.weatherGrid.appendChild(daysChart(model.days));
-    var region = model.city.oilRegion;
+    el.weatherGrid.appendChild(nowCard(fc.now));
+    if (fc.air) el.weatherGrid.appendChild(airCard(fc.air));
+    el.weatherGrid.appendChild(daysChart(fc.days));
+    var region = fc.city.oilRegion;
     if (region && oilData[region]) el.weatherGrid.appendChild(oilCard(oilData[region]));
     ensureOil(region);
   }
@@ -853,9 +855,7 @@ window.NavUI = (function () {
       thumb.setAttribute('aria-current', String(path === draft.background));
       thumb.addEventListener('click', function () {
         draft.background = path;
-        Array.prototype.forEach.call(el.settingsBg.children, function (node) {
-          node.setAttribute('aria-current', String(node.dataset.path === path));
-        });
+        markCurrent(el.settingsBg, 'aria-current', function (node) { return node.dataset.path === path; });
       });
       el.settingsBg.appendChild(thumb);
     });
@@ -871,8 +871,8 @@ window.NavUI = (function () {
       btn.setAttribute('aria-pressed', String(opt.value === draft.theme));
       btn.addEventListener('click', function () {
         draft.theme = opt.value;
-        Array.prototype.forEach.call(el.settingsTheme.children, function (child, i) {
-          child.setAttribute('aria-pressed', String(THEMES[i].value === draft.theme));
+        markCurrent(el.settingsTheme, 'aria-pressed', function (node, i) {
+          return THEMES[i].value === draft.theme;
         });
       });
       el.settingsTheme.appendChild(btn);

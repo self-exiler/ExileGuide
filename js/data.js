@@ -53,7 +53,7 @@ window.NavData = (function () {
           pinned: !!s.pinned,
           desc: String(s.desc || '')
         };
-        if (site.pinned) pinned.push(Object.assign({ category: name }, site));
+        if (site.pinned) pinned.push(site);
         return site;
       }).filter(Boolean);
       categories.push({ name: name, sites: sites });

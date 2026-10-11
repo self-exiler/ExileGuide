@@ -103,7 +103,7 @@ window.NavTreemap = (function () {
 
     return laid.map(function (r) {
       var node = nodes[r.index];
-      var head = headerOf(node, cfg, r);
+      var head = headerOf(cfg, r);
       var children = [];
 
       if (!isLast && Array.isArray(node.children) && node.children.length) {
@@ -124,7 +124,7 @@ window.NavTreemap = (function () {
     });
   }
 
-  function headerOf(node, cfg, r) {
+  function headerOf(cfg, r) {
     var head = cfg.header || 0;
     if (!head) return 0;
     if (r.w < (cfg.minW || 0) || r.h < (cfg.minH || 0)) return 0;

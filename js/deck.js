@@ -42,17 +42,17 @@ window.NavDeck = (function () {
     deck = config.deck;
     dotsBox = config.dots;
     hooks = config.hooks || {};
-    pages = Array.prototype.slice.call(deck.querySelectorAll('.page')).map(function (el, i) {
-      return { el: el, id: el.dataset.page || String(i), label: el.getAttribute('aria-label') || '' };
+    pages = [...deck.querySelectorAll('.page')].map(function (el) {
+      return el.getAttribute('aria-label') || '';
     });
     if (!pages.length) return;
 
-    pages.forEach(function (page, i) {
+    pages.forEach(function (label, i) {
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dot';
-      btn.title = page.label;
-      btn.setAttribute('aria-label', '第 ' + (i + 1) + ' 页：' + page.label);
+      btn.title = label;
+      btn.setAttribute('aria-label', '第 ' + (i + 1) + ' 页：' + label);
       btn.addEventListener('click', function () { go(i); });
       dotsBox.appendChild(btn);
     });
@@ -60,8 +60,9 @@ window.NavDeck = (function () {
     // passive:false 才能 preventDefault 掉浏览器滚动
     window.addEventListener('wheel', onWheel, { passive: false });
     document.addEventListener('keydown', onKeydown);
+    // 桌面/移动切换靠 mq 事件即可；窗口尺寸变化无需干预——位移用的是 vh，
+    // 浏览器随视口自动重算，重复写 transform 只是白跑一次重排。
     mq.addEventListener('change', sync);
-    window.addEventListener('resize', onResize);
     sync();
   }
 
@@ -73,13 +74,6 @@ window.NavDeck = (function () {
       return;
     }
     go(index, true);
-  }
-
-  var resizeTimer = null;
-  function onResize() {
-    if (!isDesktop()) return;
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function () { go(index, true); }, 120);
   }
 
   function go(next, instant) {
@@ -97,12 +91,10 @@ window.NavDeck = (function () {
   }
 
   function setDots(active) {
-    Array.prototype.forEach.call(dotsBox.children, function (btn, i) {
+    [...dotsBox.children].forEach(function (btn, i) {
       btn.setAttribute('aria-current', String(i === active));
     });
   }
-
-  function step(dir) { go(index + dir); }
 
   /* ---------------- 滚轮 ---------------- */
 
@@ -135,7 +127,7 @@ window.NavDeck = (function () {
       if (hooks.onTabWheel) hooks.onTabWheel(dir);
     } else {
       lock(PAGE_LOCK);
-      step(dir);
+      go(index + dir);
     }
   }
 
@@ -147,15 +139,9 @@ window.NavDeck = (function () {
 
   // 页内滚动区（[data-scroll]）还有余量时先让它滚，滚到底才翻页
   function canScrollInside(target, dy) {
-    var box = closest(target);
+    var box = target && target.closest ? target.closest('[data-scroll]') : null;
     if (!box || box.scrollHeight <= box.clientHeight + 1) return false;
     return dy > 0 ? box.scrollTop + box.clientHeight < box.scrollHeight - 1 : box.scrollTop > 0;
-  }
-
-  function closest(target) {
-    var node = target;
-    if (!node || !node.closest) return null;
-    return node.closest('[data-scroll]');
   }
 
   /* ---------------- 键盘 ---------------- */
@@ -175,14 +161,13 @@ window.NavDeck = (function () {
     else return;
 
     ev.preventDefault();
-    step(dir);
+    go(index + dir);
   }
 
   function activeIndex() { return index; }
 
   return {
     init: init,
-    go: go,
     activeIndex: activeIndex,
     isDesktop: isDesktop
   };

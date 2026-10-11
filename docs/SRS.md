@@ -3,9 +3,9 @@
 | 项目 | 内容 |
 |------|------|
 | 项目名称 | 自制导航（个人导航页） |
-| 版本 | v1.7（见 §9 修订记录） |
-| 日期 | 2026-10-06 |
-| 状态 | 已实施；v1.7 代码走查（云图流畅度与精简）：几何按尺寸 memoize、悬停 tooltip 合帧、删死导出，见 §8.8 |
+| 版本 | v1.9（见 §9 修订记录） |
+| 日期 | 2026-10-11 |
+| 状态 | 已实施；v1.9 代码走查：`setMsg` 缺省前缀输出 `undefined` 的回归修复，删 4 处死代码（`resize` 监听 / `days[].date` / `dataset.key` / 两个无引用 id），`markCurrent` 抽掉四处重复的 children 遍历，订正 3 处过时注释，见 §8.10 |
 | 部署目标 | GitHub Pages（纯静态，零构建） |
 
 ---
@@ -64,7 +64,7 @@
 - js-yaml v4.x 本地文件可用且兼容目标浏览器。
 - 任何第三方 favicon 服务（含国内聚合源）在中国大陆网络下均可能不可达，故字母坞兜底必须"可控且必好看"——它是唯一由本项目完全掌控的视觉元素；外部源只是提高真实图标命中率的"尽力而为"层级。
 - `backdrop-filter` 在目标浏览器可用；不支持时降级为半透明纯色卡片（优雅降级，不算缺陷）。
-- **外部数据源属"尽力而为"依赖**：`gateway.jrj.com` 的 `quot-dpyt` 接口须保持 `Access-Control-Allow-Origin: *` 且不改路径/字段；`api.open-meteo.com` 与 `air-quality-api.open-meteo.com` 须保持匿名可用 + CORS 开放、支持多地点且不改字段；`typhoon.slt.zj.gov.cn` 须不设 `X-Frame-Options`/`frame-ancestors`。任一失效时，对应页显示可读错误提示或空壳，**不得**影响第 1 页与整体渲染（同 FR-1.3 的处置原则）。实测基线：2026-10-06 三类源均可用（含 `OPTIONS` 预检放行、多地点回数组、`us_aqi` 有值）。
+- **外部数据源属"尽力而为"依赖**：`gateway.jrj.com` 的 `quot-dpyt` 接口须保持 `Access-Control-Allow-Origin: *` 且不改路径/字段；`api.open-meteo.com` 与 `air-quality-api.open-meteo.com` 须保持匿名可用 + CORS 开放、支持多地点且不改字段；`60s.viki.moe` 油价接口须保持免 key + CORS 开放；`typhoon.slt.zj.gov.cn` 须不设 `X-Frame-Options`/`frame-ancestors`。任一失效时，对应页显示可读错误提示或空壳，**不得**影响第 1 页与整体渲染（同 FR-1.3 的处置原则）。实测基线：2026-10-06 前三类源均可用（含 `OPTIONS` 预检放行、多地点回数组、`us_aqi` 有值）；油价源于 v1.8 接入时可用。
 
 ---
 
@@ -100,9 +100,17 @@ categories:
         url: https://github.com
         pinned: true                # 可选，true 则出现在首页大图标区
         desc: 可选的文字解释，悬停卡片以 tooltip 展示
+
+weather:                            # 第 3 页天气的预设城市（FR-13）
+  cities:
+    - name: 泰州靖江市              # 页头城市标签名，必填
+      lat: 32.02                    # 十进制度，必填且在 ±90 内
+      lon: 120.06                   # 十进制度，必填且在 ±180 内
+      oilRegion: 江苏泰州靖江        # 可选，油价卡的取数地区名；留空则该城不出油价卡
 ```
 
 - `pinned` 缺省视为 `false`。
+- `oilRegion` 缺省视为空字符串（不出油价卡）。
 - `%s` 为搜索词占位符。
 
 ### FR-2 首页大图标区
@@ -190,7 +198,11 @@ categories:
 - FR-13.7 日期标签以接口回报的 `daily[0]` 为"当地今天"顺推（今天 / 明天 / 星期 X）。不得用 `new Date('YYYY-MM-DD')` 的 UTC 解析去推星期，那会在东八区整体偏一天。
 - FR-13.8 每 10 分钟刷新一次（上游逐小时更新，更快无意义）；失败保留上一帧画面并显示错误行；页头"刷新"按钮立即补一次并重置计时，避免与到点轮询撞成两个请求。`weather.cities` 为空时不发起请求，直接报"cities 为空"。
 - FR-13.9 每次渲染只重建 `#weather-grid`。状态行与错误行必须留在该网格之外：它们与卡片同级，若图省事整体清空容器（`textContent = ''`），状态节点会被一起删掉，此后所有提示都写进游离节点——页面从此不再报告加载与失败。
-- FR-13.10 **数据编辑器必须认识 `weather` 段**：`tools/yaml-editor.html` 的导出是白名单式重建（`clean()` 只吐已知键），任何未纳入的顶层键都会在保存时被静默抹掉。故新增顶层数据段时，编辑器的 `blankModel` / `loadText` / `clean` / 表单四处须同步跟进，且表单里坐标按字符串编辑、导出时数值化，非法值标红并在检查区列明。
+- FR-13.10 **数据编辑器必须认识 `weather` 段**：`tools/yaml-editor.html` 的导出是白名单式重建（`clean()` 只吐已知键），任何未纳入的顶层键或嵌套字段都会在保存时被静默抹掉。故新增顶层数据段或 `weather.cities` 的新字段时，编辑器的 `blankModel` / `loadText` / `clean` / 表单四处须同步跟进，且表单里坐标按字符串编辑、导出时数值化，非法值标红并在检查区列明。
+- FR-13.11 第 3 页可附带**当地油价卡**，数据源为 60s `60s.viki.moe/v2/fuel-price`（免 key、CORS 开放），主站不可用时走镜像 `60s-api.viki.moe`，两个都失败再退到 `v1.apizero.cn/api/oil-price`（省级口径，限流 1 QPS）。三源全失败返回 `null`，**静默不出卡片**，不显示错误行、不拖累天气数据。
+- FR-13.12 油价取数地区来自 `weather.cities[].oilRegion`（可精确到区县），**留空则该城不显示油价卡**。同一地区在一次会话内只取一次（成功或失败均记），失败不重试。
+- FR-13.13 油价按地区缓存在 `localStorage` 单键 `nav.oil` 下，TTL 6 小时（成品油 10 个工作日才动一次，更短无意义，且须避免打爆公共实例限流）。该键与 `nav.settings`（FR-10.5）相互独立，删除其一不影响另一。
+- FR-13.14 油价卡只取「当前四档价 + 下次调价日期/方向/幅度」，**不做走势图**。方向徽标遵循国内习惯：涨红跌绿搁浅灰（与云图的红涨绿跌一致）。
 
 ### FR-14 第 4 页 · 台风路径与警报
 
@@ -230,7 +242,7 @@ v1.1 曾为"零插件"预留 `#plugin-slot` 容器与注册约定注释。实现
 | NFR-2 | 可靠性 | 任一外部资源（favicon 服务、行情接口、台风站）失败不影响页面主体渲染；云图失败保留上一帧并显示错误行，台风页失败至多是空白 iframe 加一个"新窗口打开"出口。 |
 | NFR-3 | 可维护性 | 新增/删除网站只改 YAML；新增背景只传图 + 改 YAML 清单；新增/删除天气城市只改 `weather.cities`（FR-13.2）。第 2~4 页为内置固定页，其展示逻辑不在 YAML 里（YAML 只提供天气城市这一项数据）。v1.6 追加：YAML 新增顶层段必须同步 `tools/yaml-editor.html`，否则编辑器保存会丢数据（FR-13.10）。 |
 | NFR-4 | 安全 | 仓库不含任何密钥/token；不发起携带凭据的跨域请求（行情接口用默认凭据策略，`Access-Control-Allow-Origin: *` 下也不带 cookie）；向第三方图标源请求时不发送 Referer（`referrerpolicy="no-referrer"`），不泄露本站地址。站点与引擎链接只放行 `http/https`。行情接口回写 DOM 的内容一律走 `textContent`，接口字段不得拼成 HTML。 |
-| NFR-5 | 体积 | js-yaml 本地文件 + 全部自有资源合计 < 300KB（不含背景图）。v1.1 实测约 120KB；v1.4 新增 treemap/market/deck 三个自有脚本与两页样式，v1.5 再加 weather.js 与天气页样式，全程零第三方库（云图与天气均自绘，即为此条），2026-10-06 实测 132.4KB（HTML 7.6KB + CSS 22.3KB + JS 102.5KB，其中 js-yaml 38.5KB）。仓库内不得保留未被 `index.html` 引用的文件——未被引用的资源既不生效，又撑大部署体积。 |
+| NFR-5 | 体积 | js-yaml 本地文件 + 全部自有资源合计 < 300KB（不含背景图）。v1.1 实测约 120KB；v1.4 新增 treemap/market/deck 三个自有脚本与两页样式，v1.5 再加 weather.js 与天气页样式，全程零第三方库（云图与天气均自绘，即为此条），2026-10-06 实测 132.4KB；v1.8 接入 oil.js 后实测 143.7KB（HTML 7.3KB + CSS 24.7KB + JS 73.1KB + js-yaml 38.5KB）。仓库内不得保留未被 `index.html` 引用的文件——未被引用的资源既不生效，又撑大部署体积。 |
 | NFR-6 | 兼容 | `backdrop-filter`、Grid、`fetch` 缺失时优雅降级，不报错白屏。`transition` 等简写中使用较新语法（如 `display .15s allow-discrete`）时，必须先声明一条不含新语法的基础过渡、再用增强声明覆盖；否则旧浏览器会把整条简写判为非法值，连带丢失 opacity/transform 等全部过渡。`ResizeObserver`、`matchMedia().addEventListener` 按目标浏览器现状直接可用，不再写旧式回落。 |
 | NFR-7 | 可访问性 | 自定义控件（标签、齿轮、搜索按钮、背景缩略图、主题分段项、应用按钮、站点卡片、**翻页圆点**）必须提供可见的 `:focus-visible` 焦点环，否则键盘用户会「丢失焦点」。不得用 `aria-live` 包裹每次切换都会整体重建的内容区（会导致整屏朗读）；切换状态由标签/圆点的 `aria-current` 表达。深色模式须通过 `color-scheme` 让原生控件（下拉框、滚动条）一并切换。键盘翻页在焦点位于文本框/下拉时让位给控件自身（`INPUT`/`TEXTAREA`/`SELECT` 与 `contenteditable`）。 |
 | NFR-8 | 资源开销 | 不得为大面积重复元素（如数十张卡片、上千个云图格子）添加 `will-change` 提层——那会把优化目标从省内存反转为吃显存。模糊与提层的使用范围以 FR-5.7 为准；deck 位移用单个容器的 `transform`，不引入提层提示。云图格子不吃 `backdrop-filter`（自身不透明，套一层纯耗 GPU）。 |
@@ -250,8 +262,9 @@ v1.1 曾为"零插件"预留 `#plugin-slot` 容器与注册约定注释。实现
 │   ├── data.js             # 数据层：YAML → 归一化模型（无 DOM）
 │   ├── prefs.js            # localStorage 读写（无 DOM）
 │   ├── treemap.js          # 布局层：squarified treemap 纯几何算法（无 DOM、无请求）
-│   ├── market.js           # 行情数据层：杰瑞接口 → 市值树 + 色阶/格式化（无 DOM）
+│   ├── market.js           # 行情数据层：金融界接口 → 市值树 + 色阶/格式化（无 DOM）
 │   ├── weather.js          # 天气数据层：Open-Meteo 两接口 → 多城预报模型（无 DOM）
+│   ├── oil.js              # 油价数据层：多源降级 → 四档价 + 下次调价模型（无 DOM）
 │   ├── deck.js             # 翻页层：全站唯一 wheel/键盘入口，圆点与 transform 位移
 │   ├── ui.js               # UI 层：模型 → DOM，交互经 handlers 上报
 │   └── app.js              # 组合根：接线 + 持久化 + 按需加载
@@ -262,7 +275,7 @@ v1.1 曾为"零插件"预留 `#plugin-slot` 容器与注册约定注释。实现
 └── docs/SRS.md
 ```
 
-分层硬约束（与实现一一对应）：`data.js` / `icons.js` / `prefs.js` / `treemap.js` 不得触碰 DOM、不得发请求；`market.js` / `weather.js` 只发请求与算数值，不得触碰 DOM；`ui.js` 不得 `fetch`、不得读 localStorage、不得解析 YAML、**不得自行监听滚轮**（滚轮入口唯一在 `deck.js`，见 FR-7.3/FR-11.3）；`deck.js` 只认"页"这一层，不渲染任何业务内容，通过 hooks 向 `ui.js` 要判定与动作；`app.js` 不承载业务逻辑，只做接线、持久化与按需加载（FR-11.7）。层间契约 = **归一化模型结构 + CSS 类名**（`.site-card` / `.site-card--pinned` / `.site-icon` / `.site-tile` / `.site-name` / `.tab[aria-current]` / `.dot[aria-current]` / `.bg-thumb[aria-current]` / `.seg-item` / `.tm-ind` / `.tm-grp` / `.tm-leaf` / `.wx-now` / `.wx-air` / `.wx-day` / `.city-item`），重写 UI 只动 `ui.js` + `style.css`。
+分层硬约束（与实现一一对应）：`data.js` / `icons.js` / `prefs.js` / `treemap.js` 不得触碰 DOM、不得发请求；`market.js` / `weather.js` / `oil.js` 只发请求与算数值，不得触碰 DOM；`ui.js` 不得 `fetch`、不得读 localStorage、不得解析 YAML、**不得自行监听滚轮**（滚轮入口唯一在 `deck.js`，见 FR-7.3/FR-11.3）；`deck.js` 只认"页"这一层，不渲染任何业务内容，通过 hooks 向 `ui.js` 要判定与动作；`app.js` 不承载业务逻辑，只做接线、持久化与按需加载（FR-11.7）。层间契约 = **归一化模型结构 + CSS 类名**（`.site-card` / `.site-card--pinned` / `.site-icon` / `.site-tile` / `.site-name` / `.tab[aria-current]` / `.dot[aria-current]` / `.bg-thumb[aria-current]` / `.seg-item` / `.tm-ind` / `.tm-grp` / `.tm-leaf` / `.wx-now` / `.wx-air` / `.wx-chart` / `.wx-oil`），重写 UI 只动 `ui.js` + `style.css`。
 
 ---
 
@@ -437,6 +450,52 @@ v1.1 曾为"零插件"预留 `#plugin-slot` 容器与注册约定注释。实现
 
 ---
 
+### 8.9 代码走查结论（v1.8 · 死代码清理与规范回填）
+
+本轮起因：油价功能已实现并提交，但 `docs/SRS.md` 与 `README.md` 均未回写，属**规范与实现脱节**——SRS 自称"实施的唯一依据"，实现里却没有它的条目。走查顺带清出若干死代码与过时注释。
+
+| 决策点 | 结论 | 否决项及原因 |
+|--------|------|--------------|
+| 油价需求补录 | 新增 FR-13.11~13.14 追认已实现行为，并回填 §2.4 依赖、§5 目录、YAML Schema | 不补录：文档缺条比代码缺条更危险——下一个人按 SRS 改代码会把油价当成不存在的东西删掉 |
+| 编辑器 `oilRegion` 丢失 | **修**：`loadText` / `clean` / 表单三处补齐该字段 | 沿用现状：`clean()` 是白名单式重建，用户在编辑器里保存一次，三座城市的油价配置会被静默抹掉——正是 FR-13.10 立规矩要防的那类丢失 |
+| `pinned[].category` 字段 | 删 | 全仓无任何读取点（首页只渲染卡片，不按分类分组展示）；为一个没人用的字段给每条 pinned 做一次 `Object.assign` 拷贝 |
+| `ui.js` 的 `el.deck` / `el.dots` / `el.stage` | 删 | `init()` 里取了元素存起来就再没用过：deck 与圆点由 `deck.js` 经 `config` 自行持有，`#stage` 只有 CSS 需要 |
+| `deck.js` 的 `step()` 与 `closest()` | 内联删除 | 两个各只有一处调用的一行包装；`pages` 对象里的 `el` / `id` 字段同样无读取点（圆点只用到 `label`） |
+| `NavDeck.go` 导出 | 删 | `app.js` 只用 `init` / `isDesktop` / `activeIndex`；翻页入口是滚轮、键盘、圆点三者，不对外暴露裸 `go` |
+| `index.html` 的 `data-page` 属性 | 删 | 自 `deck.js` 不再读 `dataset.page` 起即为死属性；页的唯一标识是 `aria-label`，圆点的 title 与 aria-label 都取自它 |
+| `oil.js` 的内存缓存层 | 删，只留 localStorage | `ui.js` 已有 `oilData` 会话级去重（同一地区成功或失败都只取一次），第二层内存缓存在其之上永不可能命中；`writeCache` 里那次 `memory[region] = entry` 是纯粹的死写 |
+| `oil.js` 存储键 `'***'` | 改为 `nav.oil` | 原值是占位符残留（疑似密钥扫描误伤），虽不报错但会在 localStorage 里留下一个无法辨认的键；与 `nav.settings` 命名对齐 |
+| `oil.js` 的 promise 链 | 改 `async/await` + `for` 循环 | 原 `SIXTY_HOSTS.forEach` 串链要读两层缩进才看清"逐个试、拿到就停"；`await` 在一条直线上，且项目其余异步代码（`app.js` / `weather.js`）本就用 `async` |
+| 四个状态行函数 | 合并出 `setMsg(node, text, prefix)` | `marketMessage` / `marketError` / `weatherMessage` / `weatherError` 是同一段逻辑抄四遍，只差一个前缀常量 |
+| 编辑器 `validLat` / `validLon` | 合并为 `validCoord(v, limit)` | 两个函数除数字外无差别 |
+| `treemap.js` 的 `headerOf(node, cfg, r)` | 去掉未使用的 `node` 形参 | 该函数只读 `cfg` 与 `r`，`node` 从未被引用 |
+| `weather.js` 局部变量 `model` 遮蔽 | 改名 `fc` | 遮蔽 `ui.js` 模块级的导航 `model`，同文件内两套同名数据模型，读代码时必须逐处确认指的是哪个 |
+| `sites.yml` 空站点条目 | 删 | `name` 与 `url` 皆空，归一化阶段会被丢弃，但它会让编辑器校验区常驻一条红色警告 |
+
+**净结果**：自有 JS 减少约 60 行，删除 3 处死导出、5 处死属性/死字段、1 处死缓存层；文档补齐油价全部条目并订正 6 处过时表述（README 的"第 3 页的地图"应为第 4 页、SRS 类名契约里的 `.wx-day` / `.city-item` 早在 v1.6 已删、`market.js` 注释里的"杰瑞接口"应为"金融界"等）。
+
+### 8.10 v1.9 决议（`setMsg` 回归修复与二次精简）
+
+本轮起因是复核 v1.8 的合并动作。`setMsg(node, text, prefix)` 把四个状态行函数并成一个时，只把两个错误行调用点的 `prefix` 补上了，两个状态行调用点（`marketMessage` / `weatherMessage`）漏传——`text ? prefix + text : ''` 于是拼出字面量 `"undefined正在加载行情…"`。这是典型的"抽象合并不等于等价"：合并前每个函数各自持有自己的前缀字面量，合并后前缀变成了调用点参数，而调用点数量从 4 变 1 时最容易漏。
+
+| 项 | 决议 | 理由 |
+|----|------|------|
+| `setMsg` 缺省 `prefix` 输出 `undefined` | **修**：`prefix \|\| ''` | 页面会直接显示 `undefined正在加载行情…`，是可见的显示缺陷而非风格问题；两个错误行的前缀照旧由调用点传入，不改错误行的文案 |
+| `deck.js` 的 `resize` 监听 | 删 | 位移写作 `translateY(-index * 100vh)`，视口一变浏览器自动重算，无需 JS 重写 transform；原监听（120ms 防抖后 `go(index, true)`）只是每次 resize 白跑一次强制回流。桌面/移动形态切换由 `mq` 的 `change` 事件覆盖，那才是真正需要重算的时机 |
+| `weather.js` 的 `days[].date` | 删 | 归一化时存了原始 `time` 字段，但 `ui.js` 的七日图只用 `label`（已由 `dayLabel()` 算好）、`cond`、`group`、`max`、`min`、`rain`；`date` 无任何读取点 |
+| 云图维度按钮的 `dataset.key` | 删 | 当前维度由 `aria-current` 表达，点击判定也读 `aria-current`；`dataset.key` 写入后无人读。唯一真用 `dataset` 做缓存键的是 `#market-tip` 的 `dataset.key`，那个保留 |
+| `index.html` 的 `#stage` / `#weather` | 删 id，保留 class | 两个 id 都无任何读取点（`el.stage` 已在 v1.8 删；`#weather` 从未被 JS 或 CSS 引用）。CSS 只认 `.stage` 与 `.wx`，故 class 留着 |
+| 四处「遍历 children 改 aria-current/aria-pressed」 | 抽 `markCurrent(box, attr, match)` | 云图维度、城市标签、背景选择、主题分段是同一段逻辑抄四遍，只差属性名与命中条件。`deck.js` 的 `setDots` 同理，但属另一层，不跨层复用 |
+| `Array.prototype.forEach.call(x.children, …)` ×5 | 改 `[...x.children]` | 项目已在用 `async/await`、`Map`、`Set`、`closest()`、`Array.from`，目标浏览器下限本就支持 iterable 展开；展开写法短一截且可读 |
+| CSS 与 `ui.js` 的"域名小字仅 64px 有空间显示" | 订正为"按 `--pinned` 判定" | 规则实际是 `.site-card--pinned .site-tile__sub { display: block }`，与像素尺寸无关；窄屏下 `.site-card--pinned .site-icon` 缩到 52px，小字照样显示。原注释描述了一个不存在的尺寸判定 |
+| SRS FR-9 里"smoke test 反向断言其不存在" | 保留 | 该表述记录的是 v1.1→v1.2 的历史决策依据（当时的测试确实断言过挂载点不存在），不是在描述当前存在的测试；改掉反而丢失了"为什么当初判定它是死代码"的证据 |
+
+**未采纳**：`ui.js` 的 `prune()` 与 `seen` 集合、`market.js` 的 `seq` 过期响应丢弃、`treemap.js` 的 `worst()` 长宽比判定——逐一确认过均有实际职责（跨帧复用后清理不再出现的格子、丢弃切维度后迟到的响应、squarified 算法的核心），不是过度设计。
+
+**净结果**：自有 JS 净减 4 行（删 4 处死代码抵消 `markCurrent` 的新增），修 1 个可见显示缺陷；文档订正 1 处过时注释、1 处误导性注释，新增 §8.10 与 v1.9 修订记录。验证：手写一次性 jsdom 冒烟（用完即删，`.workbuddy/` 下不留测试脚本）46 项断言全绿，覆盖首屏渲染 / 标签切换 / 设置草稿与 `markCurrent` / `setMsg` 四种前缀组合 / 云图维度 / 台风懒挂载 / `resize` 后页码不变 / 编辑器往返不丢 `oilRegion`；全部 JS 文件 `node --check` 通过。
+
+---
+
 ## 9. 修订记录
 
 | 版本 | 日期 | 说明 |
@@ -449,3 +508,5 @@ v1.1 曾为"零插件"预留 `#plugin-slot` 容器与注册约定注释。实现
 | v1.5 | 2026-10-06 | 站点由三页变四页：新增 FR-13 天气预报（Open-Meteo 三接口自绘当前 + 7 天 + 美标 AQI，中文城市搜索与 localStorage 记忆，10 分钟刷新），台风页改号为 FR-14 并同步全部交叉引用；FR-11.1/11.7 与 §1.2/§1.3/§2.3/§2.4 对齐四页与新增依赖；FR-13.7 把"状态行必须留在可重建网格外"固化为需求（实测中真实踩到）；NFR-5 体积改实测 132.4KB；§5 补 `weather.js` 与分层；§6 明确不做改为三页内置固定页；§7 补天气页实测项与两条未复核边界；§8.6 记录本轮决议（含中国天气网 Referer 锁 403 的实测否决） |
 | v1.6 | 2026-10-06 | 天气城市改为 YAML 预设：FR-13 整体改写（`weather.cities` 提供 name/lat/lon、页内取消城市搜索、多城合并为固定 2 个请求、城市标签为纯视图状态不落盘、新增 FR-13.10 要求编辑器认识 `weather` 段）；FR-1.1 与 NFR-3 把 YAML 数据范围扩展到天气城市；FR-10.2 的内容级选择例外去掉"落盘"表述；NFR-1 补请求数上界；§2.4 依赖去掉 geocoding 接口（县级地名实测查不到，运行时不再依赖）；§5 `data/sites.yml` 注释与实现同步；§7 按本轮实测重写天气页条目；§8.7 记录本轮决议；实现侧：`data.js` 归一化 `weather.cities`、`weather.js` 删 `searchCity` 改多地点数组、`ui.js` 城市标签替换搜索框、`app.js` 去掉 `nav.settings.city` 读写、`style.css` 删 `.city-*` 五组规则、`tools/yaml-editor.html` 新增天气城市表单区 |
 | v1.7 | 2026-10-06 | 代码走查（云图流畅度与精简）：FR-12.5 明确几何按「树引用 + 容器尺寸」缓存、轮询与切维度走纯重绘不重排；FR-12.6 补明悬停每帧合帧 + 矩形缓存以避免在上千格子子树上逐事件强制回流；实现侧 `ui.js` 的 `layoutMarket` memoize `packTree`、tooltip 改 `requestAnimationFrame` 合帧，`treemap.js` 移除未被外部调用的 `squarify` 导出；§8.8 记录本轮决议（含 market/weather 轮询机件**不抽公共 poller** 的否决理由） |
+| v1.8 | 2026-10-11 | 死代码清理与规范回填：追认已实现但未入规范的油价功能（新增 FR-13.11~13.14，回填 §2.4 依赖、§5 目录与分层约束、YAML Schema 的 `weather` 段与 `oilRegion`）；修编辑器 `clean()` 白名单漏 `oilRegion` 致保存即静默丢数据（FR-13.10 的同类问题）；实现侧删 `pinned[].category`、`ui.js` 的 `el.deck`/`el.dots`/`el.stage`、`deck.js` 的 `step()`/`closest()`/`pages[].el`/`pages[].id`、`NavDeck.go` 导出、`index.html` 的 `data-page`、`oil.js` 的内存缓存层与占位符存储键 `'***'`（改 `nav.oil`）；合并 `ui.js` 四个状态行函数为 `setMsg`、编辑器 `validLat`/`validLon` 为 `validCoord`、`oil.js` promise 链改 `async/await`；订正 README 与 SRS 中 6 处过时表述（台风页码、已删类名、"杰瑞接口"、油价与 `oil.js` 缺失等）；§8.9 记录本轮决议 |
+| v1.9 | 2026-10-11 | v1.8 合并动作的回归修复与二次精简：**修 `setMsg` 缺省 `prefix` 时输出字面量 `undefined` 的 bug**（v1.8 把四个状态行函数合并时引入，`marketMessage`/`weatherMessage` 两处不传前缀，页面上会显示"undefined正在加载行情…"）；实现侧删 `deck.js` 的 `resize` 监听（位移用 `vh`，浏览器随视口自动重算，重写 transform 只会白跑一次重排；桌面/移动切换已由 `mq` 的 `change` 事件覆盖）、`weather.js` 模型里的 `days[].date` 死字段、`ui.js` 云图维度按钮的 `dataset.key` 死属性、`index.html` 的 `#stage`/`#weather` 两个无引用 id；`ui.js` 四处「遍历 children 改 aria-current/aria-pressed」抽为 `markCurrent`；订正 CSS 与 `ui.js` 里"域名小字仅 64px 才有空间显示"的过时注释（实为按 `--pinned` 判定，窄屏 52px 下同样显示）；§8.10 记录本轮决议 |

@@ -12,22 +12,17 @@ window.NavOil = (function () {
     'https://60s-api.viki.moe/v2/fuel-price'
   ];
   var PROVINCE_API = 'https://v1.apizero.cn/api/oil-price';
-  var STORE_KEY = '***';
+  var STORE_KEY = 'nav.oil';
   // 成品油 10 个工作日才动一次，6 小时缓存足够，也避免打爆公共实例的限流
   var TTL = 6 * 60 * 60 * 1000;
 
-  var memory = {};
-
-  function load(region) {
-    if (!region) return Promise.resolve(null);
+  async function load(region) {
+    if (!region) return null;
     var hit = readCache(region);
-    if (hit) return Promise.resolve(hit);
-    return fromSixty(region).then(function (model) {
-      return model || fromProvinceApi(region);
-    }).then(function (model) {
-      if (model) writeCache(region, model);
-      return model || null;
-    });
+    if (hit) return hit;
+    var model = await fromSixty(region) || await fromProvinceApi(region);
+    if (model) writeCache(region, model);
+    return model;
   }
 
   function getJson(url) {
@@ -37,19 +32,16 @@ window.NavOil = (function () {
     });
   }
 
-  /* ---------------- 主源：60s ---------------- */
+  /* ---------------- 主源：60s（主站 → 镜像，逐个试） ---------------- */
 
-  function fromSixty(region) {
-    var chain = Promise.resolve(null);
-    SIXTY_HOSTS.forEach(function (host) {
-      chain = chain.then(function (model) {
+  async function fromSixty(region) {
+    for (var i = 0; i < SIXTY_HOSTS.length; i++) {
+      try {
+        var model = normalizeSixty(await getJson(SIXTY_HOSTS[i] + '?region=' + encodeURIComponent(region)));
         if (model) return model;
-        return getJson(host + '?region=' + encodeURIComponent(region))
-          .then(normalizeSixty)
-          .catch(function () { return null; });
-      });
-    });
-    return chain;
+      } catch (e) { /* 换下一个源 */ }
+    }
+    return null;
   }
 
   function normalizeSixty(json) {
@@ -70,12 +62,14 @@ window.NavOil = (function () {
 
   /* ---------------- 备源：apizero（只认省名） ---------------- */
 
-  function fromProvinceApi(region) {
+  async function fromProvinceApi(region) {
     // 接口只接受省名，取前两个字；黑龙江/内蒙古这类三字省名会匹配失败，届时静默不出卡片
-    var province = String(region).slice(0, 2);
-    return getJson(PROVINCE_API + '?province=' + encodeURIComponent(province))
-      .then(normalizeProvince)
-      .catch(function () { return null; });
+    try {
+      var json = await getJson(PROVINCE_API + '?province=' + encodeURIComponent(String(region).slice(0, 2)));
+      return normalizeProvince(json);
+    } catch (e) {
+      return null;
+    }
   }
 
   function normalizeProvince(json) {
@@ -94,28 +88,19 @@ window.NavOil = (function () {
     };
   }
 
-  /* ---------------- 缓存：内存 + localStorage ---------------- */
+  /* ---------------- 缓存：localStorage ---------------- */
 
   function readCache(region) {
-    var now = Date.now();
-    var entry = memory[region];
-    if (entry && now - entry.at < TTL) return entry.model;
-    entry = store()[region];
-    if (entry && entry.model && now - entry.at < TTL) {
-      memory[region] = entry;
-      return entry.model;
-    }
-    return null;
+    var entry = store()[region];
+    return entry && entry.model ? entry.model : null;
   }
 
   function writeCache(region, model) {
-    var entry = { at: Date.now(), model: model };
-    memory[region] = entry;
     var all = store();
-    all[region] = entry;
+    all[region] = { at: Date.now(), model: model };
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(all));
-    } catch (e) { /* 隐私模式或配额满：只剩内存缓存，不影响本次显示 */ }
+    } catch (e) { /* 隐私模式或配额满：本次显示仍正常，只是下次要重新取 */ }
   }
 
   function store() {

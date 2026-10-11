@@ -50,6 +50,7 @@
   .in--url { flex: 2 1 240px; }
   .in--desc { flex: 2 1 200px; }
   .in--sm { flex: 0 0 84px; }
+  .in--region { flex: 1 1 160px; }
   .in.bad { border-color: var(--warn); background: #fff7ed; }
   .pin { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--dim); white-space: nowrap; }
   .moves { display: inline-flex; gap: 4px; }
@@ -112,7 +113,7 @@
 
     <section class="card">
       <h2>天气城市<button id="add-city" class="btn btn--sm">+ 添加城市</button></h2>
-      <p class="hint">第 3 页天气预报的预设城市：坐标填十进制度（如 <code>30.7895</code>），标签栏按此顺序显示。导航页不做城市搜索。</p>
+      <p class="hint">第 3 页天气预报的预设城市：坐标填十进制度（如 <code>30.7895</code>），标签栏按此顺序显示。<code>油价地区</code>可留空，留空则该城不显示油价卡。导航页不做城市搜索。</p>
       <div id="cities"></div>
     </section>
 
@@ -219,7 +220,7 @@
         // 表单里坐标按字符串编辑，导出时再数值化
         weather: {
           cities: arr(raw.weather && raw.weather.cities).map(function (c) {
-            return { name: str(c && c.name), lat: str(c && c.lat), lon: str(c && c.lon) };
+            return { name: str(c && c.name), lat: str(c && c.lat), lon: str(c && c.lon), oilRegion: str(c && c.oilRegion) };
           })
         }
       };
@@ -250,14 +251,10 @@
       syncYaml();
     }
 
-    function validLat(v) {
-      var n = Number(String(v).trim());
-      return String(v).trim() !== '' && isFinite(n) && n >= -90 && n <= 90;
-    }
-
-    function validLon(v) {
-      var n = Number(String(v).trim());
-      return String(v).trim() !== '' && isFinite(n) && n >= -180 && n <= 180;
+    function validCoord(v, limit) {
+      var s = String(v).trim();
+      var n = Number(s);
+      return s !== '' && isFinite(n) && Math.abs(n) <= limit;
     }
 
     function renderCities() {
@@ -269,14 +266,18 @@
           c.name = v; mark(name, !c.name); syncYaml();
         });
         var lat = input(c.lat, '纬度 30.7895', 'in--sm', function (v) {
-          c.lat = v; mark(lat, !validLat(v)); syncYaml();
+          c.lat = v; mark(lat, !validCoord(v, 90)); syncYaml();
         });
         var lon = input(c.lon, '经度 103.8843', 'in--sm', function (v) {
-          c.lon = v; mark(lon, !validLon(v)); syncYaml();
+          c.lon = v; mark(lon, !validCoord(v, 180)); syncYaml();
+        });
+        var region = input(c.oilRegion, '油价地区（可空，如 浙江宁波鄞州）', 'in--region', function (v) {
+          c.oilRegion = v; syncYaml();
         });
         row.appendChild(name);
         row.appendChild(lat);
         row.appendChild(lon);
+        row.appendChild(region);
         row.appendChild(moves(model.weather.cities, i, renderCities));
         row.appendChild(button('×', '删除', function () {
           model.weather.cities.splice(i, 1);
@@ -285,8 +286,8 @@
         }));
         box.appendChild(row);
         mark(name, !c.name);
-        mark(lat, !validLat(c.lat));
-        mark(lon, !validLon(c.lon));
+        mark(lat, !validCoord(c.lat, 90));
+        mark(lon, !validCoord(c.lon, 180));
       });
       if (!model.weather.cities.length) box.appendChild(el('p', 'hint', '还没有天气城市'));
     }
@@ -548,7 +549,9 @@
         }),
         weather: {
           cities: model.weather.cities.map(function (c) {
-            return { name: c.name, lat: num(c.lat), lon: num(c.lon) };
+            var o = { name: c.name, lat: num(c.lat), lon: num(c.lon) };
+            if (c.oilRegion) o.oilRegion = c.oilRegion;
+            return o;
           }).filter(function (c) { return c.name || c.lat || c.lon; })
         }
       };
@@ -579,8 +582,8 @@
       model.weather.cities.forEach(function (c, i) {
         var tag = '第 ' + (i + 1) + ' 座天气城市';
         if (!c.name) issues.push(tag + '未填名称');
-        if (!validLat(c.lat)) issues.push((c.name || tag) + ' 纬度无效（须 -90~90 的数字）');
-        if (!validLon(c.lon)) issues.push((c.name || tag) + ' 经度无效（须 -180~180 的数字）');
+        if (!validCoord(c.lat, 90)) issues.push((c.name || tag) + ' 纬度无效（须 -90~90 的数字）');
+        if (!validCoord(c.lon, 180)) issues.push((c.name || tag) + ' 经度无效（须 -180~180 的数字）');
       });
       return issues;
     }
@@ -702,7 +705,7 @@
     });
 
     $('add-city').addEventListener('click', function () {
-      model.weather.cities.push({ name: '', lat: '', lon: '' });
+      model.weather.cities.push({ name: '', lat: '', lon: '', oilRegion: '' });
       renderCities();
       syncYaml();
     });

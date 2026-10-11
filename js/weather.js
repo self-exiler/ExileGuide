@@ -78,7 +78,6 @@ window.NavWeather = (function () {
     for (var i = 0; i < (day.time ? day.time.length : 0); i++) {
       var cond = condition(day.weather_code[i]);
       days.push({
-        date: day.time[i],
         label: dayLabel(day.time[i], i),
         cond: cond.label,
         group: cond.group,
