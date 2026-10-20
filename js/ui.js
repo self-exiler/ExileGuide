@@ -44,6 +44,10 @@ window.NavUI = (function () {
   var tipPending = null;   // 本帧待绘的 { leaf, x, y }
   var tipBase = null;      // 缓存 #market 视口矩形：悬停期间只读一次
   var tipSize = null;      // 缓存 tooltip 自身尺寸：仅内容重建时重算
+  var tipX = 0;            // 最近一次悬停坐标：数据刷新后重绘 tooltip
+  var tipY = 0;
+  var marketRev = 0;       // 数据帧序号：tooltip 内容按帧失效
+  var roTimer = 0;         // ResizeObserver 尾部防抖句柄
 
   var weatherData = [];    // 预设城市的最近一帧预报
   var wxIndex = 0;         // 当前选中的城市下标（纯视图状态）
@@ -132,7 +136,13 @@ window.NavUI = (function () {
     });
 
     if (window.ResizeObserver) {
-      new ResizeObserver(function () { if (marketView) layoutMarket(); }).observe(el.market);
+      new ResizeObserver(function () {
+        clearTimeout(roTimer);
+        roTimer = setTimeout(function () {
+          roTimer = 0;
+          if (marketView) layoutMarket();
+        }, 120);
+      }).observe(el.market);
     }
   }
 
@@ -267,7 +277,7 @@ window.NavUI = (function () {
     img.alt = '';
     img.loading = pinned ? 'eager' : 'lazy'; // 首页大图标在首屏
     img.decoding = 'async';
-    img.referrerpolicy = 'no-referrer';      // 不向第三方图标源泄露本站地址
+    img.referrerPolicy = 'no-referrer';      // 不向第三方图标源泄露本站地址
     var step = 0;
     img.addEventListener('error', function () {
       step += 1;
@@ -372,6 +382,7 @@ window.NavUI = (function () {
 
   function onMarketData(payload) {
     marketView = { dim: payload.dim, tree: payload.tree, hqs: payload.hqs || {} };
+    marketRev += 1;
     marketMessage('');
     marketError('');
     el.marketTime.textContent = NavMarket.tradingStamp(payload.td, payload.tm);
@@ -387,18 +398,23 @@ window.NavUI = (function () {
     // 容器尚无有效尺寸（手机未展开、页面刚切换）时跳过，ResizeObserver 会再叫一次
     if (w < 240 || h < 160) return;
 
-    // 几何只取决于「树权重 + 容器尺寸」：轮询与切维度时二者都不变，直接复用上次 packTree 结果，
-    // 跳过对全树 5000+ 节点的重算，只重绘颜色与文字（对齐 FR-12.5「每轮只改样式与文本」）。
+    // 几何只取决于「树权重 + 容器尺寸」：轮询与切维度时二者都不变，直接复用上次 packTree 结果。
+    // 树与尺寸都没变时，可见叶子集合也不会变，连全树遍历与 prune 都省掉，只改颜色和数值。
     var repacked = !(packed && packedBox &&
                      packedBox.tree === view.tree && packedBox.w === w && packedBox.h === h);
-    if (repacked) {
-      packed = NavTreemap.packTree(view.tree, { x: 0, y: 0, w: w, h: h }, TM_LEVELS);
-      packedBox = { tree: view.tree, w: w, h: h };
-      tipBase = null;   // 尺寸变了，缓存的容器矩形作废
+    if (!repacked) {
+      leafEls.forEach(function (box, key) { updateLeaf(box, key, view); });
+      refreshTip();
+      return;
     }
+
+    packed = NavTreemap.packTree(view.tree, { x: 0, y: 0, w: w, h: h }, TM_LEVELS);
+    packedBox = { tree: view.tree, w: w, h: h };
+    tipBase = null;   // 尺寸变了，缓存的容器矩形作废
 
     var layers = tmLayers();
     var seen = { ind: new Set(), grp: new Set(), leaf: new Set() };
+    var newLeaves = [];
 
     function block(map, key, layer, cls, barCls) {
       var box = map.get(key);
@@ -426,6 +442,30 @@ window.NavUI = (function () {
       }
     }
 
+    function updateLeaf(box, key, view) {
+      var quote = view.hqs[key];
+      var raw = quote ? quote.var : null;
+      var color = NavMarket.colorOf(view.dim, raw);
+      if (box._color !== color) {
+        box._color = color;
+        box.style.background = color;
+      }
+      var text = NavMarket.textOf(view.dim, raw);
+      if (box._value !== text) {
+        box._value = text;
+        box.valEl.textContent = text;
+      }
+    }
+
+    function refreshTip() {
+      if (!tipLeaf) return;
+      if (leafEls.get(tipLeaf.sid) !== tipLeaf) {
+        if (!el.marketTip.hidden) hideTip();
+        return;
+      }
+      if (!el.marketTip.hidden) showTip(tipLeaf, tipX, tipY);
+    }
+
     // 接口给的 scale 是「占父级」的比重，tooltip 要的是全市场比重，逐级乘下来
     function walk(nodes, level, path, shareIn) {
       nodes.forEach(function (n) {
@@ -438,13 +478,11 @@ window.NavUI = (function () {
         var box = block(map, key, layers[level],
           isInd ? 'tm-ind' : 'tm-grp',
           isInd ? 'tm-ind__bar' : 'tm-grp__bar');
-        if (repacked) {
-          place(box, n);
-          // 行业带文字含占比（权重派生，跨维度/轮询恒定），几何不变时无需重写
-          box.bar.textContent = isInd
-            ? n.node.name + ' ' + share.toFixed(1) + '%'
-            : n.node.name;
-        }
+        place(box, n);
+        // 行业带文字含占比（权重派生，跨维度/轮询恒定），几何不变时无需重写
+        box.bar.textContent = isInd
+          ? n.node.name + ' ' + share.toFixed(1) + '%'
+          : n.node.name;
         walk(n.children, level + 1, key + '/', share);
       });
     }
@@ -464,34 +502,34 @@ window.NavUI = (function () {
         box.valEl.className = 'tm-leaf__v';
         box.appendChild(box.nameEl);
         box.appendChild(box.valEl);
+        box.sid = key;
         leafEls.set(key, box);
       }
-      if (!box.parentNode) layers[2].appendChild(box);
-      var quote = view.hqs[key];
-      var raw = quote ? quote.var : null;
-      if (repacked) {
-        place(box, n);
-        box.classList.toggle('tm-leaf--named', n.w >= TM_LEAF.nameW && n.h >= TM_LEAF.nameH);
-        box.classList.toggle('tm-leaf--valued', n.w >= TM_LEAF.valW && n.h >= TM_LEAF.valH);
+      if (!box.parentNode) newLeaves.push(box);
+      if (box.name !== stock.name) {
+        box.name = stock.name;
+        box.nameEl.textContent = stock.name;
       }
-      box.style.background = NavMarket.colorOf(view.dim, raw);
-      box.nameEl.textContent = stock.name;
-      box.valEl.textContent = NavMarket.textOf(view.dim, raw);
-      box.info = {
-        sid: key,
-        name: stock.name,
-        code: stock.code,
-        price: quote && quote.np != null ? quote.np : null,
-        dim: view.dim.label,
-        value: NavMarket.textOf(view.dim, raw),
-        share: share
-      };
+      box.code = stock.code;
+      box.share = share;
+      place(box, n);
+      box.classList.toggle('tm-leaf--named', n.w >= TM_LEAF.nameW && n.h >= TM_LEAF.nameH);
+      box.classList.toggle('tm-leaf--valued', n.w >= TM_LEAF.valW && n.h >= TM_LEAF.valH);
+      updateLeaf(box, key, view);
     }
 
     walk(packed, 0, '', 100);
+
+    if (newLeaves.length) {
+      var frag = document.createDocumentFragment();
+      newLeaves.forEach(function (box) { frag.appendChild(box); });
+      layers[2].appendChild(frag);
+    }
+
     prune(indEls, seen.ind);
     prune(groupEls, seen.grp);
     prune(leafEls, seen.leaf);
+    refreshTip();
   }
 
   function prune(map, keep) {
@@ -524,20 +562,27 @@ window.NavUI = (function () {
   // tooltip 定位在 #market 的坐标系里：deck 带 transform，其后代的 fixed
   // 参照物会变成 deck 本身，故不用视口坐标而用云图容器坐标。
   // 每帧至多调用一次（见 scheduleTip）；矩形缓存后，稳定悬停期间只写 transform、不读布局。
+  // 数据帧更新时由 marketRev 让内容失效，下一帧或 refreshTip 重建一次。
   function showTip(leaf, x, y) {
-    if (!leaf || !leaf.info) {
+    var view = marketView;
+    if (!leaf || leaf.sid == null || !view) {
       if (tipLeaf) hideTip();
       return;
     }
     tipLeaf = leaf;
-    var info = leaf.info;
-    if (el.marketTip.dataset.key !== info.sid) {
-      el.marketTip.dataset.key = info.sid;
+    tipX = x;
+    tipY = y;
+    var quote = view.hqs[leaf.sid];
+    var raw = quote ? quote.var : null;
+    var key = leaf.sid + '@' + marketRev;
+    if (el.marketTip.dataset.key !== key) {
+      el.marketTip.dataset.key = key;
       el.marketTip.textContent = '';
-      addTipLine(el.marketTip, info.name + ' ' + info.code, 'tm-tip__title');
-      addTipLine(el.marketTip, '现价 ' + (info.price == null ? '--' : info.price), '');
-      addTipLine(el.marketTip, info.dim + ' ' + info.value, '');
-      addTipLine(el.marketTip, '全市场占比 ' + info.share.toFixed(2) + '%', '');
+      addTipLine(el.marketTip, leaf.name + ' ' + leaf.code, 'tm-tip__title');
+      addTipLine(el.marketTip, '现价 ' + (quote && quote.np != null ? quote.np : '--'), '');
+      addTipLine(el.marketTip, view.dim.label + ' ' + NavMarket.textOf(view.dim, raw), '');
+      addTipLine(el.marketTip, '全市场占比 ' +
+        (leaf.share == null ? '--' : leaf.share.toFixed(2) + '%'), '');
       tipSize = null;   // 内容变了，尺寸作废，本帧重算一次
     }
     el.marketTip.hidden = false;

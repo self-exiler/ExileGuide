@@ -22,6 +22,9 @@ window.NavMarket = (function () {
   ];
   // 源站 9 档标尺色（图例用）
   var BAND_COLORS = ['#28d742', '#1da548', '#106f2f', '#0a5421', '#424454', '#6d1414', '#960f0f', '#be1207', '#e41813'];
+  // 反向维度（市盈率）预先把色带翻好，避免每次 colorOf/legendOf 都复制数组
+  var FLAG_COLORS_DESC = FLAG_COLORS.slice().reverse();
+  var BAND_COLORS_DESC = BAND_COLORS.slice().reverse();
 
   var DIMENSIONS = [
     { key: 'chg', label: '涨跌幅', kind: 'pct', range: [-4, -3, -2, -1, 0, 1, 2, 3, 4] },
@@ -56,7 +59,7 @@ window.NavMarket = (function () {
   function colorOf(dim, raw) {
     var value = scaledValue(dim, raw);
     if (value === null) return FALLBACK;
-    var colors = dim.reverse ? FLAG_COLORS.slice().reverse() : FLAG_COLORS;
+    var colors = dim.reverse ? FLAG_COLORS_DESC : FLAG_COLORS;
     var r = dim.range;
     var last = r.length - 1;
     if (value <= (r[0] + r[1]) / 2) return colors[0];
@@ -80,7 +83,7 @@ window.NavMarket = (function () {
 
   // 图例：9 档色块 + 刻度文本（净流入刻度单位是万）
   function legendOf(dim) {
-    var palette = dim.reverse ? BAND_COLORS.slice().reverse() : BAND_COLORS;
+    var palette = dim.reverse ? BAND_COLORS_DESC : BAND_COLORS;
     return dim.range.map(function (tick, i) {
       var label;
       if (dim.kind === 'pct') label = (tick > 0 ? '+' : '') + tick + '%';

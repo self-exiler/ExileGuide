@@ -158,10 +158,18 @@ categories:
     sites:
       - name: 萌娘百科
         url: https://mzh.moegirl.org.cn/
-      - name: THB维基
+      - name: TH维基
         url: https://thwiki.cc/
       - name: 魔法禁书目录维基
         url: https://toaru.huijiwiki.com/
+      - name: 日语淫梦维基
+        url: https://wiki.yjsnpi.nu/
+      - name: 星际争霸维基
+        url: https://liquipedia.net/starcraft2/Main_Page
+      - name: Cookie
+        url: https://cookie.wiki/
+      - name: 中文淫梦维基
+        url: https://inmuwiki.miraheze.org/
 weather:
   cities:
     - name: 泰州靖江市
