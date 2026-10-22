@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://api.iowen.cn">
   <link rel="preconnect" href="https://gateway.jrj.com">
   <link rel="preconnect" href="https://60s.viki.moe">
+  <link rel="preconnect" href="https://datacenter-web.eastmoney.com">
   <link rel="icon" type="image/svg+xml" href="assets/icon/icon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/icon/favicon-32x32.png">
   <link rel="icon" href="assets/icon/favicon.ico" sizes="any">
@@ -101,6 +102,29 @@
         <iframe id="typhoon-frame" class="embed-frame" title="浙江省水利厅台风路径实时发布系统"></iframe>
       </div>
     </section>
+
+    <!-- 第 5 页 · 投资日历（数据源：东方财富数据中心，浏览器直连，见 js/calendar.js） -->
+    <section class="page page--calendar" aria-label="投资日历">
+      <header class="page-head">
+        <h2 class="page-title">投资日历</h2>
+        <div class="cal-nav">
+          <button id="cal-prev" class="chip chip--icon" type="button" title="前一天" aria-label="前一天">‹</button>
+          <span id="cal-date" class="cal-date">----</span>
+          <span id="cal-weekday" class="cal-weekday"></span>
+          <button id="cal-next" class="chip chip--icon" type="button" title="后一天" aria-label="后一天">›</button>
+          <button id="cal-today" class="chip" type="button" title="回到今天">今天</button>
+        </div>
+        <span id="calendar-meta" class="page-meta"></span>
+        <button id="calendar-refresh" class="chip" type="button" title="跳过缓存立即取数">刷新</button>
+        <a class="chip" href="https://data.eastmoney.com/xg/xg/calendar.html" target="_blank" rel="noreferrer noopener"
+           title="数据源：东方财富数据中心 · 新股/转债日历">源站 ↗</a>
+      </header>
+      <div class="cal" data-scroll>
+        <p id="calendar-status" class="cal-status">加载中…</p>
+        <div id="cal-events" class="cal-events"></div>
+      </div>
+      <p id="calendar-error" class="error" hidden></p>
+    </section>
   </main>
 
   <!-- 设置浮窗：草稿式编辑，关闭时统一应用 -->
@@ -153,6 +177,7 @@
   <script defer src="js/market.js"></script>
   <script defer src="js/weather.js"></script>
   <script defer src="js/oil.js"></script>
+  <script defer src="js/calendar.js"></script>
   <script defer src="js/deck.js"></script>
   <script defer src="js/ui.js"></script>
   <script defer src="js/app.js"></script>

@@ -52,6 +52,12 @@ window.NavUI = (function () {
   var weatherData = [];    // 预设城市的最近一帧预报
   var wxIndex = 0;         // 当前选中的城市下标（纯视图状态）
 
+  var calDate = new Date(); // 日历页当前查看日期（本地构造，纯视图状态）
+  var calModel = null;      // 最近一次成功取到的日历模型
+  var calSeq = 0;           // 取数序号：快速连点翻日只落最后一帧
+  var calLoaded = false;    // 首次自动取数只做一次
+  var CAL_RANGE_DAYS = 15;  // 可翻范围与集思录日历一致：前后各 15 天
+
   function $(id) { return document.getElementById(id); }
 
   function init(callbacks) {
@@ -78,6 +84,16 @@ window.NavUI = (function () {
     el.weatherError = $('weather-error');
     el.weatherMeta = $('weather-meta');
     el.weatherRefresh = $('weather-refresh');
+    el.calPrev = $('cal-prev');
+    el.calNext = $('cal-next');
+    el.calToday = $('cal-today');
+    el.calDate = $('cal-date');
+    el.calWeekday = $('cal-weekday');
+    el.calendarMeta = $('calendar-meta');
+    el.calendarRefresh = $('calendar-refresh');
+    el.calendarStatus = $('calendar-status');
+    el.calEvents = $('cal-events');
+    el.calendarError = $('calendar-error');
     el.settingsToggle = $('settings-toggle');
     el.overlay = $('settings-overlay');
     el.panel = $('settings-panel');
@@ -98,6 +114,11 @@ window.NavUI = (function () {
     el.weatherRefresh.addEventListener('click', function () {
       if (handlers.onWeatherRefresh) handlers.onWeatherRefresh();
     });
+
+    el.calPrev.addEventListener('click', function () { shiftCalendar(-1); });
+    el.calNext.addEventListener('click', function () { shiftCalendar(1); });
+    el.calToday.addEventListener('click', function () { shiftCalendar(-dayDiffFromToday()); });
+    el.calendarRefresh.addEventListener('click', function () { calendarLoad(true); });
 
     el.settingsToggle.addEventListener('click', openSettings);
     el.settingsClose.addEventListener('click', function () { closeSettings(true); });
@@ -814,6 +835,128 @@ window.NavUI = (function () {
     return box;
   }
 
+  /* ---------------- 第 5 页 · 投资日历 ---------------- */
+
+  var WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+  // 供 app.js 在首次进入本页（或移动端启动）时调用；缓存命中即瞬时渲染
+  function calendarEnsure() {
+    if (calLoaded) return;
+    calLoaded = true;
+    calendarLoad(false);
+  }
+
+  function shiftCalendar(days) {
+    calDate = new Date(calDate.getFullYear(), calDate.getMonth(), calDate.getDate() + days);
+    calendarLoad(false);
+  }
+
+  function dayDiffFromToday() {
+    var t = new Date();
+    return Math.round((new Date(calDate.getFullYear(), calDate.getMonth(), calDate.getDate())
+      - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000);
+  }
+
+  // 连点翻日会并发多个请求：calSeq 发号，晚到的旧响应直接丢弃（同 weather.js 的 seq 约定）
+  function calendarLoad(force) {
+    var my = ++calSeq;
+    var key = NavCalendar.fmtKey(calDate);
+    paintCalendarHead();
+    if (!calModel || calModel.date !== key) {
+      el.calEvents.textContent = '';
+      setMsg(el.calendarStatus, '正在加载日历…');
+    }
+    NavCalendar.load(key, { force: force }).then(function (model) {
+      if (my !== calSeq) return;
+      setMsg(el.calendarStatus, '');
+      setMsg(el.calendarError, '');
+      calModel = model;
+      renderCalendar();
+    }, function (e) {
+      if (my !== calSeq) return;
+      setMsg(el.calendarStatus, '');
+      setMsg(el.calendarError, (e && e.message ? e.message : String(e)), '日历数据加载失败：');
+      renderCalendar();
+    });
+  }
+
+  function paintCalendarHead() {
+    el.calDate.textContent = calDate.getFullYear() + '年' + (calDate.getMonth() + 1) + '月' + calDate.getDate() + '日';
+    el.calWeekday.textContent = WEEKDAYS[calDate.getDay()];
+    var diff = dayDiffFromToday();
+    el.calPrev.disabled = diff <= -CAL_RANGE_DAYS;
+    el.calNext.disabled = diff >= CAL_RANGE_DAYS;
+  }
+
+  function renderCalendar() {
+    var key = NavCalendar.fmtKey(calDate);
+    paintCalendarHead();
+    el.calEvents.textContent = '';
+    if (!calModel || calModel.date !== key) return;   // 当日没取到：错误行已提示，这里不放假数据
+
+    if (calModel.rest) {
+      var rest = document.createElement('div');
+      rest.className = 'cal-rest';
+      rest.appendChild(span('cal-rest__icon', '◷'));
+      var txt = document.createElement('div');
+      txt.appendChild(span('cal-rest__main', calModel.restLabel + ' · 休市'));
+      txt.appendChild(span('cal-rest__sub', 'A股当日休市，无交易事件'));
+      rest.appendChild(txt);
+      el.calEvents.appendChild(rest);
+      return;
+    }
+    if (!calModel.groups.length) {
+      el.calEvents.appendChild(span('cal-status', '当日暂无投资事件'));
+      return;
+    }
+    var count = 0;
+    calModel.groups.forEach(function (g) {
+      count += g.items.length;
+      el.calEvents.appendChild(calGroup(g));
+    });
+    el.calendarMeta.textContent = count + ' 项 · 数据源：东方财富数据中心';
+  }
+
+  function calGroup(g) {
+    var box = document.createElement('div');
+    box.className = 'cal-group';
+    var head = document.createElement('div');
+    head.className = 'cal-group__head';
+    var dot = document.createElement('span');
+    dot.className = 'cal-group__dot';
+    dot.style.background = g.color;
+    head.appendChild(dot);
+    head.appendChild(document.createTextNode(g.title));
+    head.appendChild(span('cal-group__count', String(g.items.length)));
+    box.appendChild(head);
+    var grid = document.createElement('div');
+    grid.className = 'cal-items';
+    g.items.forEach(function (it) { grid.appendChild(calItem(it)); });
+    box.appendChild(grid);
+    return box;
+  }
+
+  function calItem(it) {
+    var row = document.createElement('div');
+    row.className = 'cal-item';
+    if (it.notes) row.title = it.notes;
+    var code = span('cal-item__code', it.code);
+    var name = document.createTextNode(it.name);
+    if (it.url) {
+      var a = document.createElement('a');
+      a.href = it.url;
+      a.target = '_blank';
+      a.rel = 'noreferrer noopener';
+      a.appendChild(code);
+      a.appendChild(name);
+      row.appendChild(a);
+    } else {
+      row.appendChild(code);
+      row.appendChild(name);
+    }
+    return row;
+  }
+
   /* ---------------- 台风页 ---------------- */
 
   // 重型 SPA，只在首次进入第 4 页时才真正挂载
@@ -961,6 +1104,8 @@ window.NavUI = (function () {
     // 供 app.js 接线天气页
     onWeatherData: onWeatherData,
     weatherMessage: weatherMessage,
-    weatherError: weatherError
+    weatherError: weatherError,
+    // 供 app.js 接线投资日历页
+    calendarEnsure: calendarEnsure
   };
 })();

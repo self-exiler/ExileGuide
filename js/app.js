@@ -1,14 +1,15 @@
 /**
- * 组合根：接线数据层、偏好层、翻页层、UI 层，负责设置持久化与第 2~4 页的按需加载。
+ * 组合根：接线数据层、偏好层、翻页层、UI 层，负责设置持久化与第 2~5 页的按需加载。
  * 设置优先级：nav.settings 覆盖 > sites.yml 默认；与默认一致的字段不落盘。
  */
 (function () {
   'use strict';
 
-  // deck 索引：0 导航 / 1 大盘云图 / 2 天气 / 3 台风
+  // deck 索引：0 导航 / 1 大盘云图 / 2 天气 / 3 台风 / 4 投资日历
   var MARKET_PAGE = 1;
   var WEATHER_PAGE = 2;
   var TYPHOON_PAGE = 3;
+  var CALENDAR_PAGE = 4;
 
   var model = null;
   var marketDim = 'chg';
@@ -99,6 +100,7 @@
       NavWeather.pause();
     }
     if (index === TYPHOON_PAGE) NavUI.mountTyphoon();
+    if (index === CALENDAR_PAGE) NavUI.calendarEnsure();
   }
 
   function onVisibility() {
@@ -139,6 +141,7 @@
       startMarket();
       startWeather();
       NavUI.mountTyphoon();
+      NavUI.calendarEnsure();
     }
     document.addEventListener('visibilitychange', onVisibility);
   }

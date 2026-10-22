@@ -937,6 +937,65 @@ html[data-theme="dark"] .wx-oil__dir--down { color: #63d694; }
   border: 0;
 }
 
+/* ---------- 第 5 页 · 投资日历 ---------- */
+.cal-nav { display: flex; align-items: center; gap: 8px; }
+.chip:disabled { opacity: .35; cursor: default; }
+.chip:disabled:hover { background: var(--card-bg); }
+.cal-date { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cal-weekday { font-size: 12px; color: var(--fg-dim); }
+
+.cal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  margin: 0 18px 18px;
+}
+
+.cal-status { margin: 0; padding: 20px 4px; color: var(--fg-dim); font-size: 14px; }
+
+.cal-events { display: flex; flex-direction: column; gap: 12px; }
+
+.cal-group {
+  padding: 12px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+.cal-group__head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+.cal-group__dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.cal-group__count { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--fg-dim); }
+
+.cal-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 5px 16px;
+}
+
+.cal-item { font-size: 13px; overflow: hidden; }
+.cal-item a { display: block; color: inherit; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-item a:hover { color: var(--accent); text-decoration: underline; }
+.cal-item__code { margin-right: 6px; font-size: 12px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+
+.cal-rest {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  color: var(--fg-dim);
+  font-size: 14px;
+}
+.cal-rest__icon { font-size: 16px; line-height: 1; }
+.cal-rest__main { display: block; }
+.cal-rest__sub { display: block; font-size: 12px; opacity: .8; }
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 640px) {
   .stage { padding: 16px 12px 48px; }
@@ -954,6 +1013,8 @@ html[data-theme="dark"] .wx-oil__dir--down { color: #63d694; }
   .wx-chart__max, .wx-chart__min { font-size: 10px; }
   .wx-chart__day { font-size: 11px; }
   .wx-chart__cond { font-size: 10px; }
+  .cal { margin: 0 12px 12px; }
+  .cal-items { grid-template-columns: 1fr; }
 }
 
 /* 桌面端才启用整页翻页。该条件与 js/deck.js 的 DESKTOP 字符串是同一份契约，改一处必须改两处；
@@ -991,18 +1052,19 @@ html[data-theme="dark"] .wx-oil__dir--down { color: #63d694; }
 
   .tm, .embed { min-height: 0; }
 
-  /* 天气卡较多时页内自滚，滚到底才翻页（FR-11.5） */
-  .wx { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  /* 天气卡较多时页内自滚，滚到底才翻页（FR-11.5）；日历事件多时同理 */
+  .wx, .cal { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
   /* 右侧留一条给翻页圆点的通道：否则圆点会压在云图右缘和台风网自带的工具条上 */
   .page--market .tm,
   .page--weather .wx,
-  .page--typhoon .embed { margin-right: 34px; }
+  .page--typhoon .embed,
+  .page--calendar .cal { margin-right: 34px; }
 }
 
 /* 不支持 backdrop-filter 时降级为半透明纯色，保证可读性 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .site-card, .tab, .chip, .search,
-  .wx-now, .wx-air, .wx-chart { background: var(--card-bg-hover); }
+  .wx-now, .wx-air, .wx-chart, .cal-group, .cal-rest { background: var(--card-bg-hover); }
   .panel { background: var(--card-bg-solid); }
 }
