@@ -10,7 +10,7 @@
 - **第 2 页 · 大盘云图**：自绘 squarified treemap，面积 = 市值占比、颜色 = 涨跌，行业 → 二级 → 个股三级；六个维度可切（涨跌幅 / 近一周 / 近一月 / 近一年 / 资金净流入 / 市盈率），12s 自动刷新，悬停看个股详情。数据直连金融界公开行情接口，无需 key、无代理。
 - **第 3 页 · 天气预报**：当前温度/体感/湿度/风速/降水 + 未来 7 天柱状图（含降水概率）+ 美标 AQI 与 PM2.5/PM10，城市在 YAML 里配了 `oilRegion` 时附一张当地油价卡（当前四档价 + 下次调价方向）。城市来自 `data/sites.yml` 的预设列表，页头按城市切换（标签上带该城当前温度），**不做搜索**；每 10 分钟自动刷新，页头有手动刷新。数据源 Open-Meteo 与 60s 油价接口，均为匿名只读、无需 key、无代理；无论预设几座城市，一轮天气刷新只有 2 个请求。
 - **第 4 页 · 台风路径与警报**：嵌入浙江省水利厅台风路径实时发布系统（地图 + 台风警报面板）。
-- **第 5 页 · 投资日历**：按日展示新股/转债的申购、中签、缴款、上市与转债最后转股日，`‹`/`›` 前后翻日（各 15 天）、可回今天。数据直连东方财富数据中心公开报表，无需 key、无代理；结果按日期缓存在 localStorage。原型本是集思录首页日历，但其接口无 CORS 且禁 iframe，纯前端不可行（见「第 2~5 页的外部数据」）。
+- **第 5 页 · 投资日历**：按日展示新股/转债的申购、中签、缴款、上市，转债最后转股日与 REITs 认购/上市，`‹`/`›` 前后翻日（各 15 天）、可回今天。数据直连东方财富数据中心公开报表，无需 key、无代理；结果按日期缓存在 localStorage。原型本是集思录首页日历，但其接口无 CORS 且禁 iframe，纯前端不可行（见「第 2~5 页的外部数据」）。
 - **首页大图标区**：所有标记 `pinned: true` 的站点，按 YAML 顺序汇总。
 - **分类标签页**：点击标签切换，无刷新。
 - **搜索引擎切换**：Google / 百度 / Bing 等，记住上次选择。
@@ -120,7 +120,7 @@ weather:                              # 第 3 页天气的预设城市（坐标�
 | 第 3 页 天气预报       | Open-Meteo：`api.open-meteo.com/v1/forecast`（当前 + 7 天）与 `air-quality-api.open-meteo.com`（美标 AQI / PM2.5 / PM10） | 浏览器直连 GET，两个接口均 CORS 全开、无需 key；两者都支持多地点（`latitude=a,b,c`），故**几座城市都只发 2 个请求**，10 分钟刷新 |
 | 第 3 页 油价卡         | 60s`60s.viki.moe/v2/fuel-price`（主源 + 镜像）→ `v1.apizero.cn/api/oil-price`（备源，只认省名）                          | 浏览器直连 GET，免 key；主源挂了走镜像，都挂了退到备源，全挂则不出卡片。结果按地区缓存在 localStorage 6 小时                             |
 | 第 4 页 台风路径与警报 | 浙江省水利厅`typhoon.slt.zj.gov.cn`                                                                                         | iframe 嵌入（源站不设`X-Frame-Options`，实测可嵌）                                                                                     |
-| 第 5 页 投资日历       | 东方财富数据中心`datacenter-web.eastmoney.com/api/data/v1/get`：`RPT_IPO_CALENDAR`（新股/转债 申购·中签·缴款·上市）与 `RPT_BOND_CB_LIST`（按 `TRANSFER_END_DATE` 过滤转债最后转股日） | 浏览器直连 GET，接口回 `Access-Control-Allow-Origin: *`，无需 key、无代理；单日 2 个请求，结果按日期缓存在 localStorage（当天 10 分钟，其它日期不过期） |
+| 第 5 页 投资日历       | 东方财富数据中心`datacenter-web.eastmoney.com/api/data/v1/get`：`RPT_IPO_CALENDAR`（新股/转债 申购·中签·缴款·上市）、`RPT_BOND_CB_LIST`（按 `TRANSFER_END_DATE` 过滤转债最后转股日）与 `RPT_REITS_APPLY_LIST`（REITs 认购总表，全量约百条，独立缓存 24 小时后前端按日匹配认购起止与上市日） | 浏览器直连 GET，接口回 `Access-Control-Allow-Origin: *`，无需 key、无代理；单日最多 3 个请求（REITs 表命中缓存则 2 个），按日结果缓存在 localStorage（当天 10 分钟，其它日期不过期） |
 
 **为什么投资日历不用集思录**：需求原型是集思录首页的投资日历，但实测四条路全堵——接口不回任何 CORS 头（浏览器读不到）、不支持 JSONP、站点 `X-Frame-Options: SAMEORIGIN` 禁 iframe、公共 CORS 代理被源站侧拦截（allorigins/codetabs 超时、corsproxy.io 转收费）。换东财数据中心自组后覆盖面略窄（没有指数调样、宏观发布这类人工整理条目），但链路干净。要换源就改 `js/calendar.js` 顶部的 `HOST` 与两个 `reportName`。
 

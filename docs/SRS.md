@@ -3,9 +3,9 @@
 | 项目 | 内容 |
 |------|------|
 | 项目名称 | 自制导航（个人导航页） |
-| 版本 | v1.10（见 §9 修订记录） |
+| 版本 | v1.11（见 §9 修订记录） |
 | 日期 | 2026-10-11 |
-| 状态 | 已实施；v1.10 新增第 5 页投资日历（FR-15，东财数据中心自组，集思录路线实测否决），见 §8.11 |
+| 状态 | 已实施；v1.11 第 5 页投资日历增补 REITs 认购/上市组（FR-15.2，`RPT_REITS_APPLY_LIST` 总表 24 小时缓存） |
 | 部署目标 | GitHub Pages（纯静态，零构建） |
 
 ---
@@ -213,9 +213,9 @@ weather:                            # 第 3 页天气的预设城市（FR-13）
 
 ### FR-15 第 5 页 · 投资日历
 
-- FR-15.1 按日展示 A 股投资提示事件，分组为：新股申购 / 新股中签 / 新股缴款 / 新股上市、转债申购 / 转债中签 / 转债缴款 / 转债上市、转债最后转股日。每组带源站口径的色点与条目数，条目为「代码 + 名称」，可点时链往东财源站详情页（`target=_blank` + `rel="noreferrer noopener"`），不可点时渲染纯文本，**不做 `#` 假链接**。
-- FR-15.2 数据源为东方财富数据中心匿名接口 `datacenter-web.eastmoney.com/api/data/v1/get`（CORS 全开、无需 key）：`RPT_IPO_CALENDAR` 按 `TRADE_DATE` 过滤单日取新股/转债事件（`SECURITY_TYPE` 0=新股 1=转债），`RPT_BOND_CB_LIST` 按 `TRANSFER_END_DATE` 过滤当日出转债最后转股日。单日固定 2 个请求。**不采用集思录首页日历**（需求原型）：其接口实测不回任何 CORS 头、`callback` 参数被忽略（无 JSONP）、站点 `X-Frame-Options: SAMEORIGIN` 禁 iframe，且公共 CORS 代理被源站侧拦截（allorigins/codetabs 超时、cors.eu.org 限流、corsproxy.io 转收费）——纯前端四条路全堵，见 §8.11。
-- FR-15.3 结果按日期缓存在 localStorage（单键 `nav.calendar`）：当天条目 10 分钟过期（事件日内仍会追加），其它日期不过期；「刷新」按钮跳过缓存强制回源。读缓存时顺带按 TTL 清扫旧键，防翻日攒键撑爆配额。
+- FR-15.1 按日展示 A 股投资提示事件，分组为：新股申购 / 新股中签 / 新股缴款 / 新股上市、转债申购 / 转债中签 / 转债缴款 / 转债上市、转债最后转股日、REITs认购 / REITs上市。每组带源站口径的色点与条目数，条目为「代码 + 名称」，可点时链往东财源站详情页（`target=_blank` + `rel="noreferrer noopener"`），不可点时渲染纯文本，**不做 `#` 假链接**。
+- FR-15.2 数据源为东方财富数据中心匿名接口 `datacenter-web.eastmoney.com/api/data/v1/get`（CORS 全开、无需 key）：`RPT_IPO_CALENDAR` 按 `TRADE_DATE` 过滤单日取新股/转债事件（`SECURITY_TYPE` 0=新股 1=转债），`RPT_BOND_CB_LIST` 按 `TRANSFER_END_DATE` 过滤当日出转债最后转股日，`RPT_REITS_APPLY_LIST` 全量拉 REITs 认购总表（实测约百余条一页可容，独立缓存 24 小时、前端按 `SUBSCRIBE_START/END_DATE` 与 `LISTING_DATE` 匹配当日——REITs 不在新股日历内，实测 508/180 代码段查询为空）。单日最多 3 个请求，REITs 表命中缓存时为 2 个。**不采用集思录首页日历**（需求原型）：其接口实测不回任何 CORS 头、`callback` 参数被忽略（无 JSONP）、站点 `X-Frame-Options: SAMEORIGIN` 禁 iframe，且公共 CORS 代理被源站侧拦截（allorigins/codetabs 超时、cors.eu.org 限流、corsproxy.io 转收费）——纯前端四条路全堵，见 §8.11。
+- FR-15.3 结果按日期缓存在 localStorage（单键 `nav.calendar`）：当天条目 10 分钟过期（事件日内仍会追加），其它日期不过期；REITs 总表存于同键的 `__reits__` 固定子键，24 小时过期；「刷新」按钮跳过缓存强制回源（含 REITs 表）。读缓存时顺带按 TTL 清扫旧键，防翻日攒键撑爆配额。
 - FR-15.4 翻日为**纯视图状态**（FR-10.2 的内容级选择例外）：`‹`/`›` 前后翻日、范围各 15 天（越界禁用按钮）、「今天」一键回当日；日期不落 localStorage。快速连点以序号丢弃迟到响应（同 weather.js 的 `seq` 约定），只落最后一帧。
 - FR-15.5 周末按休市处理：渲染「周末 · 休市」banner，不放假数据；法定节假日无免后端且 CORS 开放的可靠接口（节假日接口实测对带 Origin 请求 403），故只判周末，接受该覆盖缺口。
 - FR-15.6 上游字段进入 DOM 前须过白名单校验：色值只放行 `#hex`（否则退回主题强调色），链接只放行 `http(s)`（相对路径拼源站前缀，`javascript:` 等丢弃，同 FR-1 的 URL 纪律）。
@@ -248,7 +248,7 @@ v1.1 曾为"零插件"预留 `#plugin-slot` 容器与注册约定注释。实现
 
 | 编号 | 类别 | 要求 |
 |------|------|------|
-| NFR-1 | 性能 | 首屏仅请求 HTML/CSS/JS/YAML + pinned 图标；无骨架阻塞，总请求数与 pinned 数量线性相关。脚本统一 `defer`，让浏览器先完成解析与首屏绘制。切换标签不得重建标签栏或重复触发内容区渲染（见 FR-3.4）。v1.4 追加、v1.5 扩充、v1.6 收紧：云图接口、天气接口与台风 iframe 均为首屏之后按需触发（FR-11.7），第 1 页的首屏请求集不因第 2~5 页而增加；天气页无论预设几座城市，一轮刷新固定 2 个请求（FR-13.3），切城零请求（FR-13.4）；投资日历单日固定 2 个请求且当天缓存 10 分钟（FR-15.3），翻到缓存命中的日期零请求。 |
+| NFR-1 | 性能 | 首屏仅请求 HTML/CSS/JS/YAML + pinned 图标；无骨架阻塞，总请求数与 pinned 数量线性相关。脚本统一 `defer`，让浏览器先完成解析与首屏绘制。切换标签不得重建标签栏或重复触发内容区渲染（见 FR-3.4）。v1.4 追加、v1.5 扩充、v1.6 收紧：云图接口、天气接口与台风 iframe 均为首屏之后按需触发（FR-11.7），第 1 页的首屏请求集不因第 2~5 页而增加；天气页无论预设几座城市，一轮刷新固定 2 个请求（FR-13.3），切城零请求（FR-13.4）；投资日历单日最多 3 个请求且当天缓存 10 分钟（FR-15.2/FR-15.3，REITs 总表另按 24 小时缓存），翻到缓存命中的日期零请求。 |
 | NFR-2 | 可靠性 | 任一外部资源（favicon 服务、行情接口、台风站）失败不影响页面主体渲染；云图失败保留上一帧并显示错误行，台风页失败至多是空白 iframe 加一个"新窗口打开"出口。 |
 | NFR-3 | 可维护性 | 新增/删除网站只改 YAML；新增背景只传图 + 改 YAML 清单；新增/删除天气城市只改 `weather.cities`（FR-13.2）。第 2~5 页为内置固定页，其展示逻辑不在 YAML 里（YAML 只提供天气城市这一项数据）。v1.6 追加：YAML 新增顶层段必须同步 `tools/yaml-editor.html`，否则编辑器保存会丢数据（FR-13.10）。 |
 | NFR-4 | 安全 | 仓库不含任何密钥/token；不发起携带凭据的跨域请求（行情接口用默认凭据策略，`Access-Control-Allow-Origin: *` 下也不带 cookie）；向第三方图标源请求时不发送 Referer（`referrerpolicy="no-referrer"`），不泄露本站地址。站点与引擎链接只放行 `http/https`。行情接口回写 DOM 的内容一律走 `textContent`，接口字段不得拼成 HTML。 |
@@ -343,6 +343,7 @@ v1.1 曾为"零插件"预留 `#plugin-slot` 容器与注册约定注释。实现
 - [x] 投资日历数据层单测（node 真实网络）：交易日 7 组事件、周末休市标记、空日返回空组、缓存命中零请求、失败路径错误可读；转债/新股详情链接分流正确（FR-15.2/FR-15.3）。
 - [x] 投资日历页 jsdom 冒烟 18 断言全绿：5 圆点、日期头、分组渲染、外链 `rel/target`、meta 来源行、翻日与连点竞态停在末帧、缓存键积累、五页结构无回归（FR-15.1/FR-15.4）。
 - [x] 东财空日语义实测：无数据时返回 `success:false + code:9201「返回数据为空」`，数据层与真错误分流，页面显示"当日暂无投资事件"（FR-15.7）。
+- [x] REITs 认购/上市接入实测（v1.11）：`RPT_REITS_APPLY_LIST` 全表 103 条一页取回；认购开始日（如 2026-11-03 华夏凯德商业REIT，notes 带发售价与项目类型）与上市日（2026-10-28）各自成组；条目链往 `data.eastmoney.com/reits/detail/{code}.html`；总表缓存命中后单日回 2 请求（FR-15.2/FR-15.3）。jsdom 冒烟 8 断言全绿（含从今天三连 › 到 REITs 认购日的真实翻日路径）。
 - [x] 暗色主题下第 2 页图例、行业标签带、tooltip 均可读。
 - [ ] **真实桌面宽度（≥1280px）下的视觉复核**：两轮机制实测所用受控浏览器视口被锁在 531→638 CSS px，为走桌面分支临时把断点降到 480px（测完已还原，`js/deck.js` 与 `css/style.css` 两处 861px 已核对一致）。翻页 / 路由 / 云图 / 天气 / 嵌入的**逻辑与几何**均已实证（含 `#weather-grid` 两列模板与圆点通道的级联归属静态核对），但宽屏下的页头单行排布、云图密度、天气双列卡片比例未经人眼确认。
 - [ ] 641~860px（既非移动、又未达桌面断点）区间天气页按基础两列网格渲染：该区间不启用翻页，故无圆点通道需求；本轮视口 638px 恰落在 `max-width: 640px` 单列覆盖内，未直接目视该区间。
@@ -550,3 +551,4 @@ v1.1 曾为"零插件"预留 `#plugin-slot` 容器与注册约定注释。实现
 | v1.8 | 2026-10-11 | 死代码清理与规范回填：追认已实现但未入规范的油价功能（新增 FR-13.11~13.14，回填 §2.4 依赖、§5 目录与分层约束、YAML Schema 的 `weather` 段与 `oilRegion`）；修编辑器 `clean()` 白名单漏 `oilRegion` 致保存即静默丢数据（FR-13.10 的同类问题）；实现侧删 `pinned[].category`、`ui.js` 的 `el.deck`/`el.dots`/`el.stage`、`deck.js` 的 `step()`/`closest()`/`pages[].el`/`pages[].id`、`NavDeck.go` 导出、`index.html` 的 `data-page`、`oil.js` 的内存缓存层与占位符存储键 `'***'`（改 `nav.oil`）；合并 `ui.js` 四个状态行函数为 `setMsg`、编辑器 `validLat`/`validLon` 为 `validCoord`、`oil.js` promise 链改 `async/await`；订正 README 与 SRS 中 6 处过时表述（台风页码、已删类名、"杰瑞接口"、油价与 `oil.js` 缺失等）；§8.9 记录本轮决议 |
 | v1.9 | 2026-10-11 | v1.8 合并动作的回归修复与二次精简：**修 `setMsg` 缺省 `prefix` 时输出字面量 `undefined` 的 bug**（v1.8 把四个状态行函数合并时引入，`marketMessage`/`weatherMessage` 两处不传前缀，页面上会显示"undefined正在加载行情…"）；实现侧删 `deck.js` 的 `resize` 监听（位移用 `vh`，浏览器随视口自动重算，重写 transform 只会白跑一次重排；桌面/移动切换已由 `mq` 的 `change` 事件覆盖）、`weather.js` 模型里的 `days[].date` 死字段、`ui.js` 云图维度按钮的 `dataset.key` 死属性、`index.html` 的 `#stage`/`#weather` 两个无引用 id；`ui.js` 四处「遍历 children 改 aria-current/aria-pressed」抽为 `markCurrent`；订正 CSS 与 `ui.js` 里"域名小字仅 64px 才有空间显示"的过时注释（实为按 `--pinned` 判定，窄屏 52px 下同样显示）；§8.10 记录本轮决议 |
 | v1.10 | 2026-10-21 | 新增第 5 页投资日历（FR-15）：东财数据中心 `RPT_IPO_CALENDAR`（新股/转债 申购·中签·缴款·上市）+ `RPT_BOND_CB_LIST`（转债最后转股日）浏览器直连自组，单日 2 请求，按日期 localStorage 缓存（当天 10 分钟），翻日 ±15 天为纯视图状态、`seq` 丢迟到响应，色值/链接白名单校验，周末休市 banner；需求原型集思录因无 CORS、无 JSONP、`SAMEORIGIN` 禁 iframe、公共代理被源站拦而否决，为它加反代被用户否决（§8.11 全记录）；实现侧新增 `js/calendar.js`、`index.html` 第 5 个 `.page` 与 script、`ui.js` 日历渲染段（`calendarEnsure` 起于 `app.js` 的 `onPageChange(4)` 与移动端启动分支）、`style.css` `.cal-*` 并入 861px 圆点通道组；文档同步五页口径（§1.1/§1.3/§2.4/FR-11.1/11.4/11.6/11.7/§5/§6/NFR-1/3/5/§7）；§8.11 记录本轮决议 |
+| v1.11 | 2026-10-23 | 投资日历增补 REITs：新增第三路 `RPT_REITS_APPLY_LIST`（公募 REITs 认购总表，实测 103 条一页可取、REITs 不在新股日历内），产出「REITs认购」（认购开始/截止按 `SUBSCRIBE_START/END_DATE` 匹配当日）与「REITs上市」（`LISTING_DATE`）两组，链往 `reits/detail/{code}` 页；总表在 `nav.calendar` 内以 `__reits__` 子键独立缓存 24 小时，单日请求 2→至多 3；FR-15.1/15.2/15.3、NFR-1、§7 与 README 同步 |

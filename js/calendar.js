@@ -6,6 +6,8 @@
  * Access-Control-Allow-Origin: *，可浏览器直连：
  *   RPT_IPO_CALENDAR   新股/转债 申购·中签率·中签号·缴款日·上市（按 TRADE_DATE 过滤单日）
  *   RPT_BOND_CB_LIST   转债全表（按 TRANSFER_END_DATE 过滤出「最后转股日」）
+ *   RPT_REITS_APPLY_LIST 公募 REITs 认购总表（全量仅百余条，24 小时缓存，前端按日匹配
+ *                      认购起止 SUBSCRIBE_START/END_DATE 与上市日 LISTING_DATE；REITs 不在新股日历内）
  * 休市只按周末本地判断（法定节假日接口均不适合免后端使用）。
  * 结果按日期缓存于 localStorage：当天 10 分钟（事件日内仍会追加），其它日期不过期。
  */
@@ -18,6 +20,12 @@ window.NavCalendar = (function () {
   var CB_BASE = HOST + '?reportName=RPT_BOND_CB_LIST' +
     '&columns=SECURITY_CODE,SECURITY_NAME_ABBR,CONVERT_STOCK_CODE,TRANSFER_END_DATE' +
     '&pageSize=200&pageNumber=1&source=WEB&client=WEB&filter=';
+  var REITS_BASE = HOST + '?reportName=RPT_REITS_APPLY_LIST' +
+    '&columns=SECURITY_CODE,SECURITY_NAME_ABBR,EXPAND_NAME_ABBR,ITEMTYPE_NAME,SALE_PRICE,' +
+    'SUBSCRIBE_START_DATE,SUBSCRIBE_END_DATE,LISTING_DATE' +
+    '&pageSize=500&pageNumber=1&sortColumns=SUBSCRIBE_START_DATE&sortTypes=-1&source=WEB&client=WEB';
+  var REITS_TTL = 24 * 60 * 60 * 1000;
+  var REITS_KEY = '__reits__';   // 总表缓存在同一 store 里的固定键（非日期键）
   var EM = 'https://data.eastmoney.com';
   var STORE_KEY = 'nav.calendar';
   var TTL_TODAY = 10 * 60 * 1000;
@@ -39,6 +47,8 @@ window.NavCalendar = (function () {
     '上市':   { kind: 'cb', title: '转债上市', color: '#e26c58' }
   };
   var CEASE = { title: '转债最后转股日', color: '#e4c47e' };
+  var REIT_SUB = { title: 'REITs认购', color: '#5bb9dc' };
+  var REIT_LIST = { title: 'REITs上市', color: '#e26c58' };
 
   async function load(dateKey, opts) {
     var force = !!(opts && opts.force);
@@ -49,11 +59,23 @@ window.NavCalendar = (function () {
     var next = shiftKey(dateKey, 1);
     var rows = await Promise.all([
       fetchRows(IPO_BASE + dayFilter('TRADE_DATE', dateKey, next), '新股日历'),
-      fetchRows(CB_BASE + dayFilter('TRANSFER_END_DATE', dateKey, next), '转债表')
+      fetchRows(CB_BASE + dayFilter('TRANSFER_END_DATE', dateKey, next), '转债表'),
+      reitsTable(force)
     ]);
-    var model = buildModel(dateKey, rows[0], rows[1]);
+    var model = buildModel(dateKey, rows[0], rows[1], rows[2]);
     writeCache(dateKey, model);
     return model;
+  }
+
+  // REITs 认购总表：百余条、变动少，独立缓存 24 小时，按日匹配在 buildModel 里做
+  async function reitsTable(force) {
+    if (!force) {
+      var hit = readCache(REITS_KEY);
+      if (hit) return hit.rows || [];
+    }
+    var rows = await fetchRows(REITS_BASE, 'REITs认购表');
+    writeCache(REITS_KEY, { rows: rows });
+    return rows;
   }
 
   /* ---------------- 请求 ---------------- */
@@ -88,7 +110,7 @@ window.NavCalendar = (function () {
 
   /* ---------------- 归一化 ---------------- */
 
-  function buildModel(dateKey, ipoRows, ceaseRows) {
+  function buildModel(dateKey, ipoRows, ceaseRows, reitsRows) {
     var order = [];
     var byTitle = {};
 
@@ -125,6 +147,27 @@ window.NavCalendar = (function () {
       });
     });
 
+    (reitsRows || []).forEach(function (r) {
+      var code = String(r.SECURITY_CODE || '');
+      if (!code) return;
+      var name = String(r.EXPAND_NAME_ABBR || r.SECURITY_NAME_ABBR || code);
+      var ss = day(r.SUBSCRIBE_START_DATE), se = day(r.SUBSCRIBE_END_DATE), ld = day(r.LISTING_DATE);
+      var detail = EM + '/reits/detail/' + encodeURIComponent(code) + '.html';
+      var tail = (r.SALE_PRICE == null ? '' : ' · 发售价 ' + r.SALE_PRICE + ' 元') +
+        (r.ITEMTYPE_NAME ? ' · ' + String(r.ITEMTYPE_NAME) : '');
+      if (ss === dateKey || se === dateKey) {
+        push(REIT_SUB, {
+          code: code, name: name,
+          notes: (ss === dateKey ? '认购开始' : '认购截止') +
+            (ss === dateKey && se === dateKey ? '（今日截止）' : '') + tail,
+          url: detail
+        });
+      }
+      if (ld === dateKey) {
+        push(REIT_LIST, { code: code, name: name, notes: '上市' + tail, url: detail });
+      }
+    });
+
     var weekend = isWeekend(dateKey);
     return {
       date: dateKey,
@@ -141,6 +184,9 @@ window.NavCalendar = (function () {
     if (/\.BJ$/.test(s)) return '·北交所';
     return '';
   }
+
+  // 东财日期字段形如 '2021-05-31 00:00:00'，取前 10 位即 'YYYY-MM-DD'
+  function day(s) { return String(s || '').slice(0, 10); }
 
   /* ---------------- 日期工具（只用本地字段，避开 new Date('YYYY-MM-DD') 的 UTC 偏移坑） ---------------- */
 
@@ -186,8 +232,8 @@ window.NavCalendar = (function () {
     var today = fmtKey(new Date());
     var now = Date.now();
     Object.keys(all).forEach(function (k) {
-      // 非今天的条目不过期；只有「今天」的条目按 TTL_TODAY 滚动失效
-      var ttl = k === today ? TTL_TODAY : Infinity;
+      // 非今天的日期条目不过期；「今天」按 TTL_TODAY 滚动失效；REITs 总表按 REITS_TTL
+      var ttl = k === today ? TTL_TODAY : (k === REITS_KEY ? REITS_TTL : Infinity);
       if (!all[k] || !all[k].model || typeof all[k].at !== 'number' || now - all[k].at > ttl) delete all[k];
     });
     return all;
